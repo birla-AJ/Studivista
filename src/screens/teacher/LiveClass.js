@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Platform, Vibration,
-    PermissionsAndroid,
+    PermissionsAndroid, Modal,
 } from 'react-native';
 import {
     RTCPeerConnection, RTCView, mediaDevices,
@@ -13,6 +13,7 @@ import { SERVER_URL, ICE_SERVERS } from '../../config';
 import { SIZES, SPACING, RADIUS } from '../../theme';
 import { useTheme } from '../../theme/ThemeContext';
 import AppIcon from '../../components/AppIcon';
+import LiveClassChat from '../../components/LiveClassChat';
 import { useAuth } from '../../contexts/AuthContext';
 import { endLiveClass, markStudentJoined } from '../../services/firestoreService';
 import { Toast } from '../../components/Toast';
@@ -75,6 +76,10 @@ const LiveClass = ({ navigation, route }) => {
     const [remoteStreamURLs, setRemoteStreamURLs] = useState({});
     const [leftToast, setLeftToast] = useState(null);
     const [classEnded, setClassEnded] = useState(false);
+    const [liveSocket, setLiveSocket] = useState(null);
+    const [chatVisible, setChatVisible] = useState(false);
+    const [unreadChatCount, setUnreadChatCount] = useState(0);
+    const [featuredFullscreen, setFeaturedFullscreen] = useState(false);
 
     // Use refs that lag behind state, so socket handlers see fresh values
     const micOnRef = useRef(true);
@@ -225,6 +230,7 @@ const LiveClass = ({ navigation, route }) => {
 
             const socket = passedSocket || io(SERVER_URL, { transports: ['websocket'] });
             socketRef.current = socket;
+            setLiveSocket(socket);
 
             const onConnected = () => {
                 setStatus('Connected · ' + roomId);
@@ -637,6 +643,10 @@ const LiveClass = ({ navigation, route }) => {
             : teacherInRoom ? `👨‍🏫 ${teacherInRoom.name || 'Teacher'}` : '';
     const featuredFit = screenShareStreamURL || isSharingScreen ? 'contain' : 'cover';
 
+    useEffect(() => {
+        if (!featuredStreamURL) setFeaturedFullscreen(false);
+    }, [featuredStreamURL]);
+
     return (
         <View style={styles.container}>
             {/* TOP BAR */}
@@ -654,7 +664,24 @@ const LiveClass = ({ navigation, route }) => {
                     <Text style={styles.classTitle} numberOfLines={1}>{cls.title || 'Live Class'}</Text>
                     <Text style={styles.classSub} numberOfLines={1}>{status}</Text>
                 </View>
-                <View style={{ width: 64 }} />
+                <TouchableOpacity
+                    style={[styles.headerChatBtn, chatVisible && styles.headerChatBtnActive]}
+                    onPress={() => {
+                        setChatVisible(prev => !prev);
+                        setUnreadChatCount(0);
+                    }}
+                >
+                    <View style={styles.chatIconWrap}>
+                        <AppIcon name="comments" size={17} color="#FFFFFF" />
+                        {!chatVisible && unreadChatCount > 0 && (
+                            <View style={styles.chatBadge}>
+                                <Text style={styles.chatBadgeText}>
+                                    {unreadChatCount > 9 ? '9+' : unreadChatCount}
+                                </Text>
+                            </View>
+                        )}
+                    </View>
+                </TouchableOpacity>
             </View>
 
             {/* Transient toast: "X left the class" — teacher view */}
@@ -692,11 +719,19 @@ const LiveClass = ({ navigation, route }) => {
                         <>
                             <View style={styles.featuredHeader}>
                                 <Text style={styles.featuredLabel} numberOfLines={1}>{featuredLabel}</Text>
-                                {isSharingScreen && (
-                                    <TouchableOpacity style={styles.stopShareBtn} onPress={stopScreenShare}>
-                                        <Text style={styles.stopShareBtnText}>Stop</Text>
+                                <View style={styles.featuredHeaderActions}>
+                                    <TouchableOpacity
+                                        style={styles.featuredIconBtn}
+                                        onPress={() => setFeaturedFullscreen(true)}
+                                    >
+                                        <AppIcon name="expand" size={12} color="#FFFFFF" />
                                     </TouchableOpacity>
-                                )}
+                                    {isSharingScreen && (
+                                        <TouchableOpacity style={styles.stopShareBtn} onPress={stopScreenShare}>
+                                            <Text style={styles.stopShareBtnText}>Stop</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
                             </View>
                             <RTCView
                                 streamURL={featuredStreamURL}
@@ -812,6 +847,48 @@ const LiveClass = ({ navigation, route }) => {
                 </ScrollView>
             </View>
 
+            {/* Fullscreen modal for featured stream */}
+            <Modal
+                visible={featuredFullscreen && !!featuredStreamURL}
+                transparent={false}
+                animationType="fade"
+                supportedOrientations={['portrait', 'landscape']}
+                onRequestClose={() => setFeaturedFullscreen(false)}
+            >
+                <View style={styles.fullscreenContainer}>
+                    {featuredStreamURL && (
+                        <RTCView
+                            streamURL={featuredStreamURL}
+                            style={styles.fullscreenVideo}
+                            objectFit={featuredFit}
+                            zOrder={2}
+                        />
+                    )}
+                    <View style={styles.fullscreenTopBar}>
+                        <Text style={styles.fullscreenLabel} numberOfLines={1}>{featuredLabel}</Text>
+                        <TouchableOpacity
+                            style={styles.fullscreenCloseBtn}
+                            onPress={() => setFeaturedFullscreen(false)}
+                        >
+                            <AppIcon name="compress" size={15} color="#FFFFFF" />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Class chat panel */}
+            <LiveClassChat
+                colors={colors}
+                socket={liveSocket}
+                roomId={roomId}
+                visible={chatVisible}
+                userId={user?.uid}
+                name={myName}
+                role={isTeacher ? 'teacher' : 'participant'}
+                onClose={() => setChatVisible(false)}
+                onUnreadChange={setUnreadChatCount}
+            />
+
             {/* CONTROL BAR */}
             <View style={styles.controls}>
                 <TouchableOpacity
@@ -885,6 +962,21 @@ const makeStyles = (colors) => StyleSheet.create({
     leaveBtnText: { color: colors.danger, fontSize: SIZES.sm, fontWeight: '700' },
     leaveContent: { flexDirection: 'row', alignItems: 'center', gap: 5 },
     topCenter: { flex: 1, alignItems: 'center' },
+    headerChatBtn: {
+        width: 44, height: 36, borderRadius: RADIUS.md,
+        backgroundColor: '#2a2a2a',
+        alignItems: 'center', justifyContent: 'center',
+    },
+    headerChatBtnActive: { backgroundColor: colors.primary },
+    chatIconWrap: { position: 'relative' },
+    chatBadge: {
+        position: 'absolute', top: -8, right: -11,
+        minWidth: 16, height: 16, borderRadius: 8,
+        backgroundColor: colors.warning,
+        alignItems: 'center', justifyContent: 'center',
+        paddingHorizontal: 3,
+    },
+    chatBadgeText: { color: '#111111', fontSize: 9, fontWeight: '900' },
     livePill: {
         backgroundColor: colors.primary, paddingHorizontal: SPACING.sm,
         paddingVertical: 2, borderRadius: RADIUS.full, marginBottom: 3,
@@ -921,6 +1013,30 @@ const makeStyles = (colors) => StyleSheet.create({
     },
     featuredLabel: { color: '#FFFFFF', fontWeight: 'bold', fontSize: SIZES.sm, flex: 1 },
     featuredVideo: { width: '100%', height: 280, backgroundColor: '#000' },
+    featuredHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+    featuredIconBtn: {
+        width: 30, height: 30, borderRadius: 15,
+        alignItems: 'center', justifyContent: 'center',
+        backgroundColor: 'rgba(255,255,255,0.14)',
+    },
+    fullscreenContainer: { flex: 1, backgroundColor: '#000000' },
+    fullscreenVideo: { flex: 1, width: '100%', height: '100%', backgroundColor: '#000000' },
+    fullscreenTopBar: {
+        position: 'absolute', left: 0, right: 0, top: 0, zIndex: 5,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        paddingHorizontal: SPACING.md,
+        paddingTop: SPACING.xl, paddingBottom: SPACING.sm,
+        backgroundColor: 'rgba(0,0,0,0.55)',
+    },
+    fullscreenLabel: {
+        flex: 1, color: '#FFFFFF', fontSize: SIZES.sm, fontWeight: '800',
+        marginRight: SPACING.md,
+    },
+    fullscreenCloseBtn: {
+        width: 40, height: 40, borderRadius: 20,
+        alignItems: 'center', justifyContent: 'center',
+        backgroundColor: 'rgba(255,255,255,0.16)',
+    },
     stopShareBtn: {
         backgroundColor: colors.danger, paddingHorizontal: SPACING.md,
         paddingVertical: 5, borderRadius: RADIUS.md,
