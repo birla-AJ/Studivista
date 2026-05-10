@@ -1,0 +1,143 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userDoc(request.auth.uid).role == 'admin';
+    }
+
+    function isTeacher() {
+      return isSignedIn() && userDoc(request.auth.uid).role == 'teacher';
+    }
+
+    function isStudent() {
+      return isSignedIn() && userDoc(request.auth.uid).role == 'student';
+    }
+
+    // ----- USERS -----
+    match /users/{userId} {
+      // Anyone signed in can read user docs (so dashboards can show names).
+      // Tighten this later if needed (e.g., role-based reads).
+      allow read: if isSignedIn();
+
+      // The owner can create their own doc once (used for admin bootstrap).
+      // Admins can create teacher/student docs.
+      // Teachers can create student docs (only with role 'student').
+      allow create: if isSignedIn() && (
+        request.auth.uid == userId
+        || isAdmin()
+        || (isTeacher() && request.resource.data.role == 'student')
+      );
+
+      // Owner can update their own non-role fields.
+      // Admin can update any user.
+      allow update: if isSignedIn() && (
+        isAdmin()
+        || (request.auth.uid == userId
+            && request.resource.data.role == resource.data.role)
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // ----- BATCHES -----
+    match /batches/{batchId} {
+      allow read: if isSignedIn();
+
+      allow create: if isAdmin();
+
+      // Admins can update any batch.
+      // Teachers assigned to the batch can update studentIds (for adding students).
+      allow update: if isAdmin() || (
+        isTeacher() && resource.data.teacherId == request.auth.uid
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // ----- CLASSES -----
+    match /classes/{classId} {
+      allow read: if isSignedIn();
+
+      // Teachers create their own classes, admins can create any.
+      allow create: if isAdmin() || (
+        isTeacher() && request.resource.data.teacherId == request.auth.uid
+      );
+
+      // Owner-teacher or admin can update class docs.
+      // Students can update only joinedStudentIds (to mark themselves joined).
+      allow update: if isAdmin()
+        || (isTeacher() && resource.data.teacherId == request.auth.uid)
+        || (isStudent()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['joinedStudentIds']));
+
+      allow delete: if isAdmin() || (
+        isTeacher() && resource.data.teacherId == request.auth.uid
+      );
+
+      // ----- ATTENDANCE (subcollection) -----
+      match /attendance/{studentId} {
+        allow read: if isSignedIn();
+
+        // Students can write only their own attendance row.
+        // Teachers/admins can write any attendance row in their classes.
+        allow create, update: if isAdmin()
+          || (isStudent() && request.auth.uid == studentId)
+          || (isTeacher() && get(/databases/$(database)/documents/classes/$(classId)).data.teacherId == request.auth.uid);
+
+        allow delete: if isAdmin();
+      }
+    }
+
+    // ----- NOTES -----
+    match /notes/{noteId} {
+      // Anyone signed in can read notes (students see notes for their batches; teachers see their own).
+      allow read: if isSignedIn();
+
+      // Teacher creates notes they own; admin can create any.
+      allow create: if isAdmin() || (
+        isTeacher() && request.resource.data.teacherId == request.auth.uid
+      );
+
+      // Teacher who owns the note can update; admin can update any.
+      allow update: if isAdmin() || (
+        isTeacher() && resource.data.teacherId == request.auth.uid
+      );
+
+      allow delete: if isAdmin() || (
+        isTeacher() && resource.data.teacherId == request.auth.uid
+      );
+    }
+
+    // ----- NOTIFICATIONS -----
+    match /notifications/{notifId} {
+      // Recipient can read & mark-as-read; admin/teacher can write any.
+      allow read: if isSignedIn() && (
+        isAdmin() || resource.data.userId == request.auth.uid
+      );
+
+      allow create: if isAdmin() || isTeacher() || (
+        isSignedIn() && request.resource.data.userId == request.auth.uid
+      );
+
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        (resource.data.userId == request.auth.uid
+         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']))
+      );
+
+      allow delete: if isAdmin() || (
+        resource.data.userId == request.auth.uid
+      );
+    }
+  }
+}
