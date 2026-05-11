@@ -65,6 +65,7 @@ const LiveClass = ({ navigation, route }) => {
     const [micOn, setMicOn] = useState(true);
     const [cameraOn, setCameraOn] = useState(true);
     const [speakerOn, setSpeakerOn] = useState(true);
+    const [isFrontCamera, setIsFrontCamera] = useState(true);
 
     const [isSharingScreen, setIsSharingScreen] = useState(false);
     const [senderScreenURL, setSenderScreenURL] = useState(null);
@@ -79,7 +80,8 @@ const LiveClass = ({ navigation, route }) => {
     const [liveSocket, setLiveSocket] = useState(null);
     const [chatVisible, setChatVisible] = useState(false);
     const [unreadChatCount, setUnreadChatCount] = useState(0);
-    const [featuredFullscreen, setFeaturedFullscreen] = useState(false);
+    // null when no fullscreen view is open. Otherwise: { streamURL, label, fit, mirror }
+    const [fullscreenSource, setFullscreenSource] = useState(null);
 
     // Use refs that lag behind state, so socket handlers see fresh values
     const micOnRef = useRef(true);
@@ -536,6 +538,19 @@ const LiveClass = ({ navigation, route }) => {
         setCameraOn(t.enabled);
         sendMediaState({ cameraOn: t.enabled });
     };
+    const flipCamera = () => {
+        const t = localStreamRef.current?.getVideoTracks?.()[0];
+        if (!t) {
+            Toast.warning('Camera is not ready yet.');
+            return;
+        }
+        try {
+            t._switchCamera();
+            setIsFrontCamera(prev => !prev);
+        } catch (err) {
+            Toast.error(err?.message || 'Could not flip camera.', 'Flip failed');
+        }
+    };
     const toggleSpeaker = () => {
         const next = !speakerOn;
         try { InCallManager.setSpeakerphoneOn(next); } catch {}
@@ -643,9 +658,15 @@ const LiveClass = ({ navigation, route }) => {
             : teacherInRoom ? `👨‍🏫 ${teacherInRoom.name || 'Teacher'}` : '';
     const featuredFit = screenShareStreamURL || isSharingScreen ? 'contain' : 'cover';
 
+    // Close fullscreen if the source stream goes away (sharer left, peer left, etc.)
     useEffect(() => {
-        if (!featuredStreamURL) setFeaturedFullscreen(false);
-    }, [featuredStreamURL]);
+        if (!fullscreenSource) return;
+        const { streamURL } = fullscreenSource;
+        const stillValid = streamURL === featuredStreamURL
+            || streamURL === localStreamURL
+            || Object.values(remoteStreamURLs).includes(streamURL);
+        if (!stillValid) setFullscreenSource(null);
+    }, [fullscreenSource, featuredStreamURL, localStreamURL, remoteStreamURLs]);
 
     return (
         <View style={styles.container}>
@@ -722,7 +743,12 @@ const LiveClass = ({ navigation, route }) => {
                                 <View style={styles.featuredHeaderActions}>
                                     <TouchableOpacity
                                         style={styles.featuredIconBtn}
-                                        onPress={() => setFeaturedFullscreen(true)}
+                                        onPress={() => setFullscreenSource({
+                                            streamURL: featuredStreamURL,
+                                            label: featuredLabel,
+                                            fit: featuredFit,
+                                            mirror: false,
+                                        })}
                                     >
                                         <AppIcon name="expand" size={12} color="#FFFFFF" />
                                     </TouchableOpacity>
@@ -761,13 +787,23 @@ const LiveClass = ({ navigation, route }) => {
                     showsHorizontalScrollIndicator={false}
                 >
                     {/* Self tile */}
-                    <View style={styles.tile}>
+                    <TouchableOpacity
+                        style={styles.tile}
+                        activeOpacity={0.85}
+                        disabled={!cameraOn || !localStreamURL}
+                        onPress={() => setFullscreenSource({
+                            streamURL: localStreamURL,
+                            label: `🎥 ${myName} (You)`,
+                            fit: 'cover',
+                            mirror: isFrontCamera,
+                        })}
+                    >
                         {cameraOn && localStreamURL ? (
                             <RTCView
                                 streamURL={localStreamURL}
                                 style={styles.tileVideo}
                                 objectFit="cover"
-                                mirror
+                                mirror={isFrontCamera}
                                 zOrder={0}
                             />
                         ) : (
@@ -784,7 +820,7 @@ const LiveClass = ({ navigation, route }) => {
                                 {!cameraOn && <AppIcon name="video-slash" size={10} color={colors.danger} />}
                             </View>
                         </View>
-                    </View>
+                    </TouchableOpacity>
 
                     {/* Remote tiles */}
                     {participants.map(p => {
@@ -792,8 +828,20 @@ const LiveClass = ({ navigation, route }) => {
                         const camOn = p.cameraOn !== false;
                         const mic = p.micOn !== false;
                         const isStudent = p.role !== 'host' && p.role !== 'teacher';
+                        const tappable = !!url && camOn;
                         return (
-                            <View key={p.id} style={styles.tile}>
+                            <TouchableOpacity
+                                key={p.id}
+                                style={styles.tile}
+                                activeOpacity={0.85}
+                                disabled={!tappable}
+                                onPress={() => setFullscreenSource({
+                                    streamURL: url,
+                                    label: `${p.role === 'host' || p.role === 'teacher' ? '👨‍🏫' : '🎓'} ${p.name || 'Participant'}`,
+                                    fit: 'cover',
+                                    mirror: false,
+                                })}
+                            >
                                 {url && camOn ? (
                                     <RTCView
                                         streamURL={url}
@@ -841,34 +889,35 @@ const LiveClass = ({ navigation, route }) => {
                                         </TouchableOpacity>
                                     </View>
                                 )}
-                            </View>
+                            </TouchableOpacity>
                         );
                     })}
                 </ScrollView>
             </View>
 
-            {/* Fullscreen modal for featured stream */}
+            {/* Fullscreen modal — works for the featured stream OR any tapped tile */}
             <Modal
-                visible={featuredFullscreen && !!featuredStreamURL}
+                visible={!!fullscreenSource?.streamURL}
                 transparent={false}
                 animationType="fade"
                 supportedOrientations={['portrait', 'landscape']}
-                onRequestClose={() => setFeaturedFullscreen(false)}
+                onRequestClose={() => setFullscreenSource(null)}
             >
                 <View style={styles.fullscreenContainer}>
-                    {featuredStreamURL && (
+                    {fullscreenSource?.streamURL && (
                         <RTCView
-                            streamURL={featuredStreamURL}
+                            streamURL={fullscreenSource.streamURL}
                             style={styles.fullscreenVideo}
-                            objectFit={featuredFit}
+                            objectFit={fullscreenSource.fit || 'contain'}
+                            mirror={!!fullscreenSource.mirror}
                             zOrder={2}
                         />
                     )}
                     <View style={styles.fullscreenTopBar}>
-                        <Text style={styles.fullscreenLabel} numberOfLines={1}>{featuredLabel}</Text>
+                        <Text style={styles.fullscreenLabel} numberOfLines={1}>{fullscreenSource?.label || ''}</Text>
                         <TouchableOpacity
                             style={styles.fullscreenCloseBtn}
-                            onPress={() => setFeaturedFullscreen(false)}
+                            onPress={() => setFullscreenSource(null)}
                         >
                             <AppIcon name="compress" size={15} color="#FFFFFF" />
                         </TouchableOpacity>
@@ -905,6 +954,15 @@ const LiveClass = ({ navigation, route }) => {
                 >
                     <AppIcon name={cameraOn ? 'video' : 'video-slash'} size={18} color="#FFFFFF" />
                     <Text style={styles.ctrlLabel}>{cameraOn ? 'Stop Cam' : 'Start Cam'}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[styles.ctrlBtn, !cameraOn && { opacity: 0.5 }]}
+                    onPress={flipCamera}
+                    disabled={!cameraOn}
+                >
+                    <AppIcon name="sync" size={18} color="#FFFFFF" />
+                    <Text style={styles.ctrlLabel}>{isFrontCamera ? 'Back' : 'Front'}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
