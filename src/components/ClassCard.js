@@ -27,10 +27,10 @@ const badgeStyles = StyleSheet.create({
     statusText: { fontSize: SIZES.xs, fontWeight: '800', letterSpacing: 0.5 },
 });
 
-const ClassCard = ({ cls, onPress, totalStudents }) => {
+const ClassCard = ({ cls, onPress, totalStudents, color: colorOverride }) => {
     const { colors } = useTheme();
     const styles = useMemo(() => makeStyles(colors), [colors]);
-    const color = cls.color || colors.primary;
+    const color = colorOverride || cls.color || colors.primary;
     const dateLabel = cls.date || formatDateLabel(cls.scheduledAt);
     const timeLabel = cls.time || formatTimeLabel(cls.scheduledAt);
     const durationLabel = cls.durationMin ? `${cls.durationMin} min` : (cls.duration || '');

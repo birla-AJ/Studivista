@@ -140,7 +140,12 @@ const AdminDashboard = ({ navigation }) => {
                         </View>
                         <TouchableOpacity
                             style={styles.liveCard}
-                            onPress={() => navigation.navigate('AdminClasses')}
+                            onPress={() => navigation.navigate('LiveClass', {
+                                cls: liveClass,
+                                roomId: liveClass.id,
+                                name: profile?.name || 'Admin',
+                                role: 'admin',
+                            })}
                             activeOpacity={0.85}
                         >
                             <View style={styles.livePulse}>

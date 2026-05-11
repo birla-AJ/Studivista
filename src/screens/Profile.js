@@ -10,9 +10,11 @@ import AppIcon from '../components/AppIcon';
 import { useAuth } from '../contexts/AuthContext';
 import { signOut } from '../services/authService';
 import {
+    subscribeBatches,
     subscribeBatchesByTeacher,
     subscribeBatchesByIds,
     subscribeUsersByRole,
+    subscribeClasses,
     subscribeClassesByTeacher,
     subscribeClassesByBatches,
 } from '../services/firestoreService';
@@ -27,7 +29,9 @@ const Profile = ({ navigation }) => {
     const [batches, setBatches] = useState([]);
     const [classes, setClasses] = useState([]);
     const [students, setStudents] = useState([]);
+    const [teachers, setTeachers] = useState([]);
 
+    const isAdmin = profile?.role === 'admin';
     const isTeacher = profile?.role === 'teacher';
     const isStudent = profile?.role === 'student';
     const role = profile?.role || 'student';
@@ -35,6 +39,13 @@ const Profile = ({ navigation }) => {
     // Live counts for the stats row.
     useEffect(() => {
         if (!user?.uid) return;
+        if (isAdmin) {
+            const u1 = subscribeBatches(setBatches);
+            const u2 = subscribeUsersByRole('teacher', setTeachers);
+            const u3 = subscribeUsersByRole('student', setStudents);
+            const u4 = subscribeClasses(setClasses);
+            return () => { u1?.(); u2?.(); u3?.(); u4?.(); };
+        }
         if (isTeacher) {
             const u1 = subscribeBatchesByTeacher(user.uid, setBatches);
             const u2 = subscribeClassesByTeacher(user.uid, setClasses);
@@ -47,7 +58,7 @@ const Profile = ({ navigation }) => {
             const u2 = subscribeClassesByBatches(ids, setClasses);
             return () => { u1?.(); u2?.(); };
         }
-    }, [user?.uid, isTeacher, isStudent, profile?.batchIds?.join(',')]);
+    }, [user?.uid, isAdmin, isTeacher, isStudent, profile?.batchIds?.join(',')]);
 
     const myBatchIds = useMemo(() => batches.map(b => b.id), [batches]);
     const myStudents = useMemo(
@@ -55,7 +66,13 @@ const Profile = ({ navigation }) => {
         [students, myBatchIds],
     );
 
-    const stats = isTeacher
+    const stats = isAdmin
+        ? [
+            { label: 'Batches',  value: batches.length,  color: colors.primary },
+            { label: 'Teachers', value: teachers.length, color: colors.teacherColor },
+            { label: 'Students', value: students.length, color: colors.studentColor },
+        ]
+        : isTeacher
         ? [
             { label: 'Batches',  value: batches.length,        color: colors.primary },
             { label: 'Students', value: myStudents.length,     color: colors.secondary },

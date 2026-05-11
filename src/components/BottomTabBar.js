@@ -12,6 +12,7 @@ const TAB_CONFIG = {
         { key: 'BatchList', icon: 'users', label: 'Batches' },
         { key: 'StudentList', icon: 'graduation-cap', label: 'Students' },
         { key: 'AdminClasses', icon: 'calendar-alt', label: 'Classes' },
+        { key: 'Profile', icon: 'user-circle', label: 'Profile' },
     ],
     teacher: [
         { key: 'TeacherDashboard', icon: 'home', label: 'Home' },
