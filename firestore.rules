@@ -96,6 +96,22 @@ service cloud.firestore {
 
         allow delete: if isAdmin();
       }
+
+      // ----- LIVE CLASS CHAT -----
+      match /chatMessages/{messageId} {
+        allow read: if isSignedIn();
+
+        allow create: if isSignedIn()
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.classId == classId
+          && request.resource.data.body is string
+          && request.resource.data.body.size() > 0
+          && request.resource.data.body.size() <= 500
+          && request.resource.data.senderRole in ['teacher', 'student']
+          && request.resource.data.createdAt == request.time;
+
+        allow update, delete: if false;
+      }
     }
 
     // ----- NOTES -----
