@@ -1,11 +1,8 @@
-import React, { useRef, useState } from 'react';
+import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { ThemeProvider } from './src/theme/ThemeContext';
-import { ToastHost } from './src/components/Toast';
-import FloatingChatButton from './src/components/FloatingChatButton';
-import Profile from './src/screens/Profile';
 
 // Auth Screens
 import SplashScreen from './src/screens/SplashScreen';
@@ -51,23 +48,10 @@ import WaitingScreen from './src/screens/WaitingScreen';
 const Stack = createNativeStackNavigator();
 
 export default function App() {
-  const navigationRef = useRef(null);
-  const [currentRoute, setCurrentRoute] = useState('');
-
   return (
     <ThemeProvider>
     <AuthProvider>
-      <NavigationContainer
-        ref={navigationRef}
-        onStateChange={() => {
-          const r = navigationRef.current?.getCurrentRoute?.();
-          setCurrentRoute(r?.name || '');
-        }}
-        onReady={() => {
-          const r = navigationRef.current?.getCurrentRoute?.();
-          setCurrentRoute(r?.name || '');
-        }}
-      >
+      <NavigationContainer>
         <Stack.Navigator
           initialRouteName="Splash"
           screenOptions={{ headerShown: false, animation: 'slide_from_right' }}
@@ -77,49 +61,46 @@ export default function App() {
           <Stack.Screen name="RoleSelect" component={RoleSelectScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
 
-          {/* Admin — bottom-tab targets get animation: 'none' so tab switching is instant */}
-          <Stack.Screen name="AdminDashboard" component={AdminDashboard} options={{ animation: 'none' }} />
-          <Stack.Screen name="BatchList" component={BatchList} options={{ animation: 'none' }} />
+          {/* Admin */}
+          <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
+          <Stack.Screen name="BatchList" component={BatchList} />
           <Stack.Screen name="CreateBatch" component={CreateBatch} />
-          <Stack.Screen name="StudentList" component={StudentList} options={{ animation: 'none' }} />
+          <Stack.Screen name="StudentList" component={StudentList} />
           <Stack.Screen name="AddStudent" component={AddStudent} />
-          <Stack.Screen name="AdminClasses" component={AdminClasses} options={{ animation: 'none' }} />
+          <Stack.Screen name="AdminClasses" component={AdminClasses} />
           <Stack.Screen name="AddTeacher" component={AddTeacher} />
-          <Stack.Screen name="TeacherList" component={TeacherList} options={{ animation: 'none' }} />
+          <Stack.Screen name="TeacherList" component={TeacherList} />
           <Stack.Screen name="BatchDetail" component={BatchDetail} />
           <Stack.Screen name="CreateStudent" component={CreateStudent} />
 
-          {/* Teacher — tab targets are animation: 'none' */}
-          <Stack.Screen name="TeacherDashboard" component={TeacherDashboard} options={{ animation: 'none' }} />
-          <Stack.Screen name="MyClasses" component={MyClasses} options={{ animation: 'none' }} />
+          {/* Teacher */}
+          <Stack.Screen name="TeacherDashboard" component={TeacherDashboard} />
+          <Stack.Screen name="MyClasses" component={MyClasses} />
           <Stack.Screen name="ScheduleClass" component={ScheduleClass} />
           <Stack.Screen name="LiveClass" component={LiveClass} options={{ animation: 'fade' }} />
-          <Stack.Screen name="Attendance" component={AttendanceScreen} options={{ animation: 'none' }} />
+          <Stack.Screen name="Attendance" component={AttendanceScreen} />
           <Stack.Screen name="Recordings" component={RecordingsScreen} />
-          <Stack.Screen name="TeacherStudents" component={TeacherStudents} options={{ animation: 'none' }} />
+          <Stack.Screen name="TeacherStudents" component={TeacherStudents} />
           <Stack.Screen name="TeacherNotes" component={TeacherNotes} />
           <Stack.Screen name="AddNote" component={AddNote} />
 
-          {/* Student — tab targets are animation: 'none' */}
-          <Stack.Screen name="StudentDashboard" component={StudentDashboard} options={{ animation: 'none' }} />
-          <Stack.Screen name="JoinClass" component={JoinClass} options={{ animation: 'none' }} />
-          <Stack.Screen name="AIChat" component={AIChat} options={{ animation: 'none' }} />
-          <Stack.Screen name="StudentRecordings" options={{ animation: 'none' }}>
+          {/* Student */}
+          <Stack.Screen name="StudentDashboard" component={StudentDashboard} />
+          <Stack.Screen name="JoinClass" component={JoinClass} />
+          <Stack.Screen name="AIChat" component={AIChat} />
+          <Stack.Screen name="StudentRecordings">
             {(props) => <RecordingsScreen {...props} route={{ ...props.route, params: { ...props.route.params, role: 'student' } }} />}
           </Stack.Screen>
-          <Stack.Screen name="StudentAttendance" component={StudentAttendance} options={{ animation: 'none' }} />
+          <Stack.Screen name="StudentAttendance" component={StudentAttendance} />
           <Stack.Screen name="StudentNotes" component={StudentNotes} />
 
           {/* Shared */}
-          <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ animation: 'none' }} />
-          <Stack.Screen name="Profile" component={Profile} options={{ animation: 'none' }} />
+          <Stack.Screen name="Notifications" component={NotificationsScreen} />
           <Stack.Screen name="VideoPlayer" component={VideoPlayer} options={{ animation: 'slide_from_bottom' }} />
           <Stack.Screen name="NoteDetail" component={NoteDetail} />
           <Stack.Screen name="Waiting" component={WaitingScreen} />
         </Stack.Navigator>
       </NavigationContainer>
-      <FloatingChatButton currentRoute={currentRoute} navigationRef={navigationRef} />
-      <ToastHost />
     </AuthProvider>
     </ThemeProvider>
   );

@@ -1,98 +1,129 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Studivista
 
-# Getting Started
+Studivista is a React Native learning app for admins, teachers, and students. The app includes role-based dashboards, batch and student management, scheduled classes, live classes with WebRTC, real-time chat, notes, attendance, and notifications.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+The mobile app talks to the Node.js backend in `studivista-server` over HTTP and Socket.IO. The active server URL is configured in:
 
-## Step 1: Start Metro
+- `src/config.js`
+- `src/services/api.js`
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+## Tech Stack
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+- React Native 0.83
+- React 19
+- React Navigation
+- Socket.IO client
+- React Native WebRTC
+- AsyncStorage
+- Custom server API with local compatibility shims for older data imports.
+
+## Requirements
+
+- Node.js 20 or newer
+- npm
+- Android Studio and Android SDK for Android builds
+- Xcode and CocoaPods for iOS builds
+- A running Studivista server from `studivista-server`
+
+## Setup
+
+Install app dependencies from the repository root:
 
 ```sh
-# Using npm
+npm install
+```
+
+Start Metro:
+
+```sh
 npm start
-
-# OR using Yarn
-yarn start
 ```
 
-## Step 2: Build and run your app
-
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
+Run Android:
 
 ```sh
-# Using npm
 npm run android
-
-# OR using Yarn
-yarn android
 ```
 
-### iOS
-
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+Run iOS:
 
 ```sh
 bundle install
-```
-
-Then, and every time you update your native dependencies, run:
-
-```sh
-bundle exec pod install
-```
-
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
-
-```sh
-# Using npm
+bundle exec pod install --project-directory=ios
 npm run ios
-
-# OR using Yarn
-yarn ios
 ```
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+## Server Configuration
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+The app currently points to:
 
-## Step 3: Modify your app
+```js
+http://144.24.114.0:3000
+```
 
-Now that you have successfully run the app, let's make changes!
+Update both files if the backend host changes:
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+```txt
+src/config.js
+src/services/api.js
+```
 
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
+`src/config.js` is used by live class and chat upload flows. `src/services/api.js` is used by API requests, subscriptions, and the shared Socket.IO client.
 
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
+## Available Scripts
 
-## Congratulations! :tada:
+```sh
+npm start
+```
 
-You've successfully run and modified your React Native App. :partying_face:
+Starts the React Native Metro bundler.
 
-### Now what?
+```sh
+npm run android
+```
 
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
+Builds and runs the Android app.
 
-# Troubleshooting
+```sh
+npm run ios
+```
 
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
+Builds and runs the iOS app.
 
-# Learn More
+```sh
+npm run lint
+```
 
-To learn more about React Native, take a look at the following resources:
+Runs ESLint across the app and server folder.
 
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+```sh
+npm test
+```
 
+Runs Jest tests.
+
+## Project Structure
+
+```txt
+App.js
+src/
+  components/          Shared UI components
+  contexts/            Auth context
+  screens/             Admin, teacher, student, auth, and live class screens
+  services/            API, auth, notifications, and data compatibility shims
+  theme/               Theme constants and provider
+studivista-server/     Backend API and Socket.IO server
+```
+
+## Current Verification Notes
+
+As of the latest local check:
+
+- `npm run lint` fails with React hook dependency errors and style warnings.
+- `npm test -- --runInBand` fails before assertions because Jest is not transforming ESM from `@react-navigation/native`.
+- Server JavaScript syntax checks pass.
+- The server currently requires the `pg` package in `studivista-server/config/db.js`; ensure it is installed and listed in server dependencies before deploying.
+
+## Backend
+
+See `studivista-server/README.md` for backend setup, database configuration, API endpoints, and Socket.IO events.
