@@ -11,6 +11,7 @@ import {
     subscribeBatches,
     subscribeUsersByRole,
     removeStudentFromBatch,
+    deleteBatch,
 } from '../../services/firestoreService';
 import { isUserOnline } from '../../utils/format';
 import { Toast } from '../../components/Toast';
@@ -63,6 +64,30 @@ const BatchDetail = ({ navigation, route }) => {
         );
     };
 
+    const confirmDelete = () => {
+        if (!batch) return;
+        Alert.alert(
+            'Delete batch?',
+            `This will permanently delete "${batch.name}" and unassign its teacher and students. This cannot be undone.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await deleteBatch(batch.id);
+                            Toast.success(`${batch.name} deleted.`, 'Batch removed');
+                            navigation.goBack();
+                        } catch (e) {
+                            Toast.error(e?.message || 'Could not delete the batch.', 'Error');
+                        }
+                    },
+                },
+            ],
+        );
+    };
+
     if (!batch) {
         return (
             <SafeAreaView style={styles.container}>
@@ -83,12 +108,20 @@ const BatchDetail = ({ navigation, route }) => {
                 showBack
                 onBack={() => navigation.goBack()}
                 rightComponent={
-                    <TouchableOpacity
-                        onPress={() => navigation.navigate('CreateBatch', { batch })}
-                        style={styles.editBtn}
-                    >
-                        <AppIcon name="pen" size={14} color={colors.primary} />
-                    </TouchableOpacity>
+                    <View style={styles.headerActions}>
+                        <TouchableOpacity
+                            onPress={() => navigation.navigate('CreateBatch', { batch })}
+                            style={styles.editBtn}
+                        >
+                            <AppIcon name="pen" size={14} color={colors.primary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={confirmDelete}
+                            style={styles.deleteBtn}
+                        >
+                            <AppIcon name="trash" size={14} color={colors.danger} />
+                        </TouchableOpacity>
+                    </View>
                 }
             />
 
@@ -191,6 +224,12 @@ const makeStyles = (colors) => StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.bg },
     scroll: { flex: 1, paddingHorizontal: SPACING.base },
     centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    headerActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+    deleteBtn: {
+        width: 34, height: 34, borderRadius: 12,
+        backgroundColor: colors.danger + '20',
+        alignItems: 'center', justifyContent: 'center',
+    },
     editBtn: {
         width: 34, height: 34, borderRadius: 12,
         backgroundColor: colors.primary + '20',

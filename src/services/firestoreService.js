@@ -81,7 +81,24 @@ export const updateBatch = async (batchId, data) => {
 };
 
 export const deleteBatch = async (batchId) => {
-    await batchesCol().doc(batchId).delete();
+    if (!batchId) return;
+    // Remove the batch from every student who's enrolled in it,
+    // unassign the teacher, then delete the batch doc itself.
+    const studentsSnap = await usersCol()
+        .where('batchIds', 'array-contains', batchId)
+        .get();
+    const batchSnap = await batchesCol().doc(batchId).get();
+    const teacherId = batchSnap.exists() ? batchSnap.data()?.teacherId : null;
+
+    const writer = db.batch();
+    studentsSnap.forEach(d => {
+        writer.update(d.ref, { batchIds: FieldValue.arrayRemove(batchId) });
+    });
+    if (teacherId) {
+        writer.update(usersCol().doc(teacherId), { batchIds: FieldValue.arrayRemove(batchId) });
+    }
+    writer.delete(batchesCol().doc(batchId));
+    await writer.commit();
 };
 
 export const subscribeClasses = (cb) =>
