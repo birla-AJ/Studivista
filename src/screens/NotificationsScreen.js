@@ -23,10 +23,12 @@ const SWIPE_THRESHOLD = SCREEN_W * 0.3;
 
 const ICON_BY_TYPE = {
     class_start: 'broadcast-tower',
+    class_end: 'check-circle',
     info: 'info-circle',
     schedule: 'calendar-alt',
     recording: 'video',
     batch: 'users',
+    note: 'sticky-note',
 };
 
 const formatRelative = (date) => {
@@ -170,6 +172,7 @@ const NotificationsScreen = ({ navigation }) => {
     const unreadCount = (notifications || []).filter(n => !n.read).length;
 
     const handleDismiss = async (notif) => {
+        setNotifications(prev => (prev || []).filter(n => n.id !== notif.id));
         try {
             if (!notif.read) await markNotificationRead(notif.id);
             await deleteNotification(notif.id);
@@ -177,7 +180,7 @@ const NotificationsScreen = ({ navigation }) => {
     };
 
     // Sweep through oldest → latest, animating each card out then deleting it.
-    const markAllRead = async () => {
+    const clearAll = async () => {
         if (clearing) return;
         const list = [...(notifications || [])].sort((a, b) => {
             const ta = a.createdAt?.toMillis?.() || 0;
@@ -191,6 +194,7 @@ const NotificationsScreen = ({ navigation }) => {
             const dir = i % 2 === 0 ? 'right' : 'left';
             setDismissDir(prev => ({ ...prev, [n.id]: dir }));
             await new Promise(r => setTimeout(r, 280));
+            setNotifications(prev => (prev || []).filter(item => item.id !== n.id));
             try {
                 if (!n.read) await markNotificationRead(n.id);
                 await deleteNotification(n.id);
@@ -199,6 +203,23 @@ const NotificationsScreen = ({ navigation }) => {
         }
         setClearing(false);
         setDismissDir({});
+    };
+
+    const markAllRead = async () => {
+        if (clearing) return;
+        const unread = (notifications || []).filter(n => !n.read);
+        if (unread.length === 0) return;
+        setClearing(true);
+        setNotifications(prev => (prev || []).map(n => ({ ...n, read: true })));
+        try {
+            await Promise.all(unread.map(n => markNotificationRead(n.id)));
+        } catch {}
+        setClearing(false);
+    };
+
+    const handleHeaderAction = () => {
+        if (unreadCount > 0) markAllRead();
+        else clearAll();
     };
 
     return (
@@ -210,7 +231,7 @@ const NotificationsScreen = ({ navigation }) => {
                 onBack={() => navigation.goBack()}
                 rightComponent={
                     (notifications && notifications.length > 0) ? (
-                        <TouchableOpacity onPress={markAllRead} disabled={clearing}>
+                        <TouchableOpacity onPress={handleHeaderAction} disabled={clearing}>
                             <Text style={[styles.markAllText, clearing && { opacity: 0.5 }]}>
                                 {clearing ? 'Clearing…' : (unreadCount > 0 ? 'Mark all read' : 'Clear all')}
                             </Text>
@@ -236,7 +257,13 @@ const NotificationsScreen = ({ navigation }) => {
                                 key={notif.id}
                                 notif={notif}
                                 forceDismissDir={dismissDir[notif.id]}
-                                onPress={() => !notif.read && markNotificationRead(notif.id)}
+                                onPress={() => {
+                                    if (notif.read) return;
+                                    setNotifications(prev => (prev || []).map(n => (
+                                        n.id === notif.id ? { ...n, read: true } : n
+                                    )));
+                                    markNotificationRead(notif.id).catch(() => {});
+                                }}
                                 onDismiss={() => handleDismiss(notif)}
                             />
                         ))}
