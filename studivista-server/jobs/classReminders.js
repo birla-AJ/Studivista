@@ -9,10 +9,18 @@ const REMINDER_MINUTES = toInt(process.env.CLASS_REMINDER_MINUTES, 5);
 const POLL_MS = toInt(process.env.CLASS_REMINDER_POLL_MS, 60000);
 
 const sendReminderForClass = async (pool, io, cls) => {
-  const studentIds = Array.isArray(cls.student_ids) ? cls.student_ids : [];
   const title = cls.title || 'Class';
   const batchName = cls.batch_name || 'your batch';
   const teacherName = cls.teacher_name || 'your teacher';
+  let studentIds = [];
+
+  if (cls.batch_id) {
+    const { rows } = await pool.query(
+      'SELECT student_ids FROM sv_batches WHERE id=$1',
+      [cls.batch_id],
+    );
+    studentIds = Array.isArray(rows[0]?.student_ids) ? rows[0].student_ids : [];
+  }
 
   await createNotificationsForUsers(pool, io, studentIds, {
     title: 'Class starts in 5 minutes',

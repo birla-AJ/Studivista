@@ -5,13 +5,50 @@
  * Uses Socket.IO user rooms.
  * New:     uses Socket.io user rooms — server emits 'notification' event.
  */
-import { Platform, PermissionsAndroid } from 'react-native';
-import messaging from '@react-native-firebase/messaging';
+import { NativeModules, Platform, PermissionsAndroid } from 'react-native';
 import { apiFetch, disconnectSocket, getSocket } from './api';
 
 let reconnectHandler = null;
 let tokenRefreshUnsubscribe = null;
 let currentFcmToken = null;
+let messagingModule = null;
+let messagingUnavailableWarningShown = false;
+const recentlySeenNotifications = new Map();
+
+const shouldDeliverForegroundNotification = notification => {
+  const id = notification?.id || notification?.data?.notificationId;
+  if (!id) return true;
+
+  const now = Date.now();
+  for (const [key, seenAt] of recentlySeenNotifications) {
+    if (now - seenAt > 30000) recentlySeenNotifications.delete(key);
+  }
+  if (recentlySeenNotifications.has(id)) return false;
+  recentlySeenNotifications.set(id, now);
+  return true;
+};
+
+const getMessaging = () => {
+  if (!messagingModule) {
+    try {
+      messagingModule = require('@react-native-firebase/messaging').default;
+    } catch (err) {
+      if (!messagingUnavailableWarningShown) {
+        const nativeModuleNames = Object.keys(NativeModules || {}).filter(name =>
+          name.includes('Firebase') || name.includes('RNFB'),
+        );
+        console.warn(
+          'Firebase native module unavailable; push token registration is disabled.',
+          err.message,
+          nativeModuleNames,
+        );
+        messagingUnavailableWarningShown = true;
+      }
+      return null;
+    }
+  }
+  return messagingModule;
+};
 
 // ── Register user with their socket room ──────────────────────────────────
 // Call this right after login (AuthContext does it automatically)
@@ -44,6 +81,8 @@ export const requestNotificationPermission = async () => {
     }
   }
   if (Platform.OS === 'ios') {
+    const messaging = getMessaging();
+    if (!messaging) return false;
     const status = await messaging().requestPermission();
     granted =
       status === messaging.AuthorizationStatus.AUTHORIZED ||
@@ -66,10 +105,13 @@ const saveToken = async token => {
 
 export const registerPushTokenForUser = async uid => {
   if (!uid) return null;
+  const messaging = getMessaging();
+  if (!messaging) return null;
   try {
     await messaging().registerDeviceForRemoteMessages();
     const token = await messaging().getToken();
     await saveToken(token);
+    console.log('FCM token registered for user:', uid);
     if (tokenRefreshUnsubscribe) tokenRefreshUnsubscribe();
     tokenRefreshUnsubscribe = messaging().onTokenRefresh(nextToken => {
       saveToken(nextToken).catch(err => {
@@ -103,8 +145,28 @@ export const unregisterPushTokenForUser = async () => {
 // New:      socket.on('notification', cb) → same return pattern ✅
 export const onForegroundMessage = cb => {
   const socket = getSocket();
-  socket.on('notification', cb);
-  return () => socket.off('notification', cb);
+  const deliver = notification => {
+    if (shouldDeliverForegroundNotification(notification)) cb(notification);
+  };
+
+  socket.on('notification', deliver);
+
+  const messaging = getMessaging();
+  const unsubscribeMessaging = messaging
+    ? messaging().onMessage(remoteMessage => {
+        const notification = remoteMessage?.notification || {};
+        deliver({
+          title: notification.title,
+          body: notification.body,
+          data: remoteMessage?.data || {},
+        });
+      })
+    : null;
+
+  return () => {
+    socket.off('notification', deliver);
+    if (unsubscribeMessaging) unsubscribeMessaging();
+  };
 };
 
 // ── Stubs — same names as original so no screen changes needed ────────────

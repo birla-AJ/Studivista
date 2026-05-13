@@ -10,6 +10,7 @@ const authMw = require('./middleware/auth');
 const { isAdmin, isTeacher } = require('./middleware/authorize');
 const { startClassReminderJob } = require('./jobs/classReminders');
 const { pool } = require('./config/db');
+const { initFirebase } = require('./utils/fcm');
 
 const app = express();
 const corsOrigin = process.env.CORS_ORIGIN
@@ -313,6 +314,7 @@ io.on('connection', socket => {
 
 // Export io for use in routes
 app.set('io', io);
+initFirebase();
 startClassReminderJob({ pool, io });
 
 server.on('error', err => {
