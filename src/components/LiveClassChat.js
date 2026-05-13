@@ -14,6 +14,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { errorCodes, isErrorWithCode, pick, types } from '@react-native-documents/picker';
 import AudioRecorderPlayer, {
     AudioEncoderAndroidType,
@@ -107,6 +108,7 @@ const getAndroidViewIntentUrl = (uri, type) => {
 };
 
 const uploadChatFile = async (file) => {
+    const token = await AsyncStorage.getItem('sv_token');
     const formData = new FormData();
     formData.append('file', {
         uri: normalizeUploadUri(file.uri),
@@ -116,6 +118,7 @@ const uploadChatFile = async (file) => {
 
     const response = await fetch(`${SERVER_URL}/chat-upload`, {
         method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         body: formData,
     });
 

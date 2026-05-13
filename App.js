@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { AuthProvider } from './src/contexts/AuthContext';
+import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { ThemeProvider } from './src/theme/ThemeContext';
+import ToastHost, { Toast } from './src/components/Toast';
+import { onForegroundMessage } from './src/services/notificationService';
 
 // Auth Screens
 import SplashScreen from './src/screens/SplashScreen';
@@ -44,14 +46,30 @@ import NotificationsScreen from './src/screens/NotificationsScreen';
 import VideoPlayer from './src/screens/VideoPlayer';
 import NoteDetail from './src/screens/NoteDetail';
 import WaitingScreen from './src/screens/WaitingScreen';
+import Profile from './src/screens/Profile';
 
 const Stack = createNativeStackNavigator();
+
+const NotificationListener = () => {
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!user?.uid) return undefined;
+    return onForegroundMessage(notification => {
+      if (!notification?.title && !notification?.body) return;
+      Toast.info(notification.body, notification.title || 'Notification');
+    });
+  }, [user?.uid]);
+
+  return null;
+};
 
 export default function App() {
   return (
     <ThemeProvider>
     <AuthProvider>
       <NavigationContainer>
+        <NotificationListener />
         <Stack.Navigator
           initialRouteName="Splash"
           screenOptions={{ headerShown: false, animation: 'slide_from_right' }}
@@ -99,8 +117,10 @@ export default function App() {
           <Stack.Screen name="VideoPlayer" component={VideoPlayer} options={{ animation: 'slide_from_bottom' }} />
           <Stack.Screen name="NoteDetail" component={NoteDetail} />
           <Stack.Screen name="Waiting" component={WaitingScreen} />
+          <Stack.Screen name="Profile" component={Profile} />
         </Stack.Navigator>
       </NavigationContainer>
+      <ToastHost />
     </AuthProvider>
     </ThemeProvider>
   );

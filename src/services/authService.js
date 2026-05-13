@@ -1,102 +1,137 @@
-import { fbAuth, db, FieldValue, getSecondaryAuth } from './firebase';
+/**
+ * authService.js
+ * Auth helpers backed by the Studivista API.
+ *
+ * Original exports used by screens:
+ *   signIn, signOut, getUserDoc, ensureAdminDoc,
+ *   adminCreateTeacher, adminCreateStudent, teacherCreateStudent
+ *
+ * NOTE: onAuthChanged is no longer needed — AuthContext now
+ * uses an AsyncStorage session.
+ */
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiFetch } from './api';
 
-const usersCol = () => db.collection('users');
+const TOKEN_KEY = 'sv_token';
+const PROFILE_KEY = 'sv_profile';
 
-export const onAuthChanged = (cb) => fbAuth.onAuthStateChanged(cb);
-
+// ── Login ─────────────────────────────────────────────────────────────────
+// Returns { uid, name, email, role, ... }.
 export const signIn = async (email, password) => {
-    const cred = await fbAuth.signInWithEmailAndPassword(email.trim(), password);
-    return cred.user;
+  const data = await apiFetch('/api/auth/login', {
+    method: 'POST',
+    body: { email, password },
+  });
+  console.log('Login successful, received user:', data.user);
+  await AsyncStorage.setItem(TOKEN_KEY, data.token);
+  await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(data.user));
+  return data.user; // has .uid — LoginScreen does fbUser.uid ✅
 };
 
+// ── Sign out ──────────────────────────────────────────────────────────────
 export const signOut = async () => {
-    try {
-        await fbAuth.signOut();
-    } catch (e) {
-        if (e?.code !== 'auth/no-current-user') throw e;
-    }
+  await AsyncStorage.multiRemove([TOKEN_KEY, PROFILE_KEY]);
 };
 
-export const getUserDoc = async (uid) => {
-    const snap = await usersCol().doc(uid).get();
-    return snap.exists() ? { uid, ...snap.data() } : null;
+// ── Get user doc by uid ───────────────────────────────────────────────────
+// LoginScreen: const userDoc = await getUserDoc(fbUser.uid)
+export const getUserDoc = async uid => {
+  try {
+    return await apiFetch(`/api/users/${uid}`);
+  } catch {
+    return null;
+  }
 };
 
-export const ensureAdminDoc = async (firebaseUser) => {
-    const ref = usersCol().doc(firebaseUser.uid);
-    const snap = await ref.get();
-    if (snap.exists()) return { uid: firebaseUser.uid, ...snap.data() };
-
-    const data = {
-        email: firebaseUser.email,
-        name: 'Admin',
-        role: 'admin',
-        status: 'active',
-        createdAt: FieldValue.serverTimestamp(),
-    };
-    await ref.set(data);
-    return { uid: firebaseUser.uid, ...data };
-};
-
-const createUserViaSecondaryApp = async ({ email, password }) => {
-    const secondary = getSecondaryAuth();
-    try {
-        const cred = await secondary.createUserWithEmailAndPassword(email.trim(), password);
-        await secondary.signOut();
-        return cred.user;
-    } catch (e) {
-        try { await secondary.signOut(); } catch {}
-        throw e;
-    }
-};
-
-export const adminCreateTeacher = async ({ email, password, name, subject, createdByUid }) => {
-    const newUser = await createUserViaSecondaryApp({ email, password });
-    await usersCol().doc(newUser.uid).set({
-        email: email.trim(),
-        name: name.trim(),
-        role: 'teacher',
-        subject: subject || '',
-        status: 'active',
-        createdBy: createdByUid || null,
-        batchIds: [],
-        createdAt: FieldValue.serverTimestamp(),
+// ── Ensure admin profile exists ───────────────────────────────────────────
+// LoginScreen: ensureAdminDoc(fbUser) where fbUser = { uid, email, ... }
+// Original created a Firestore doc; we ensure the server has the profile.
+export const ensureAdminDoc = async fbUser => {
+  try {
+    const data = await apiFetch('/api/auth/ensure-admin', {
+      method: 'POST',
+      body: { email: fbUser.email, password: 'Admin@123' },
     });
-    return newUser.uid;
-};
-
-export const adminCreateStudent = async ({ email, password, name, createdByUid }) => {
-    const newUser = await createUserViaSecondaryApp({ email, password });
-    await usersCol().doc(newUser.uid).set({
-        email: email.trim(),
-        name: name.trim(),
-        role: 'student',
-        status: 'active',
-        batchIds: [],
-        createdBy: createdByUid || null,
-        createdAt: FieldValue.serverTimestamp(),
-    });
-    return newUser.uid;
-};
-
-export const teacherCreateStudent = async ({ email, password, name, batchId, teacherUid }) => {
-    const newUser = await createUserViaSecondaryApp({ email, password });
-    await usersCol().doc(newUser.uid).set({
-        email: email.trim(),
-        name: name.trim(),
-        role: 'student',
-        status: 'active',
-        teacherId: teacherUid || null,
-        batchIds: batchId ? [batchId] : [],
-        createdBy: teacherUid || null,
-        createdAt: FieldValue.serverTimestamp(),
-    });
-
-    if (batchId) {
-        await db.collection('batches').doc(batchId).update({
-            studentIds: FieldValue.arrayUnion(newUser.uid),
-        });
+    // Save fresh token if returned
+    if (data.token) {
+      await AsyncStorage.setItem(TOKEN_KEY, data.token);
+      await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(data.user));
     }
+    return data.user;
+  } catch {
+    return null;
+  }
+};
 
-    return newUser.uid;
+// ── Restore session from AsyncStorage (used by AuthContext on boot) ───────
+export const getStoredProfile = async () => {
+  const raw = await AsyncStorage.getItem(PROFILE_KEY);
+  return raw ? JSON.parse(raw) : null;
+};
+
+// ── Refresh profile from server ───────────────────────────────────────────
+export const refreshProfile = async () => {
+  const user = await apiFetch('/api/auth/me');
+  await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(user));
+  return user;
+};
+
+// ── Admin: create teacher ─────────────────────────────────────────────────
+export const adminCreateTeacher = async ({
+  email,
+  password,
+  name,
+  subject,
+  createdByUid,
+}) => {
+  const data = await apiFetch('/api/auth/create-user', {
+    method: 'POST',
+    body: { email, password, name, role: 'teacher', subject, createdByUid },
+  });
+  return newUser.uid;
+};
+
+// ── Admin: create student ─────────────────────────────────────────────────
+export const adminCreateStudent = async ({
+  email,
+  password,
+  name,
+  createdByUid,
+}) => {
+  const data = await apiFetch('/api/auth/create-user', {
+    method: 'POST',
+    body: { email, password, name, role: 'student', createdByUid },
+  });
+  return data.uid;
+};
+
+// ── Teacher: create student in a batch ───────────────────────────────────
+export const teacherCreateStudent = async ({
+  email,
+  password,
+  name,
+  batchId,
+  teacherUid,
+}) => {
+  const data = await apiFetch('/api/auth/create-user', {
+    method: 'POST',
+    body: {
+      email,
+      password,
+      name,
+      role: 'student',
+      batchId,
+      createdByUid: teacherUid,
+    },
+  });
+  return data.uid;
+};
+
+// ── Stub: kept so any leftover import doesn't crash ───────────────────────
+// Original AuthContext used onAuthChanged — new AuthContext doesn't need it
+export const onAuthChanged = cb => {
+  getStoredProfile().then(profile =>
+    cb(profile ? { uid: profile.uid, email: profile.email } : null),
+  );
+  return () => {};
 };

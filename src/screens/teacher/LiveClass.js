@@ -3,6 +3,7 @@ import {
     View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Platform, Vibration,
     PermissionsAndroid, Modal,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
     RTCPeerConnection, RTCView, mediaDevices,
     RTCSessionDescription, RTCIceCandidate,
@@ -33,6 +34,41 @@ const requestMediaPermissions = async () => {
         return Object.values(granted).every(s => s === PermissionsAndroid.RESULTS.GRANTED);
     } catch {
         return false;
+    }
+};
+
+const SCREEN_SHARE_CONSTRAINTS = {
+    video: {
+        width: { ideal: 1280, max: 1280 },
+        height: { ideal: 720, max: 720 },
+        frameRate: { ideal: 15, max: 20 },
+    },
+    audio: false,
+};
+
+const tuneScreenShareSender = async (sender) => {
+    if (!sender?.getParameters || !sender?.setParameters) return;
+    try {
+        const params = sender.getParameters() || {};
+        params.degradationPreference = 'maintain-resolution';
+        params.encodings = (params.encodings?.length ? params.encodings : [{}]).map(encoding => ({
+            ...encoding,
+            maxBitrate: 1400000,
+            maxFramerate: 15,
+        }));
+        await sender.setParameters(params);
+    } catch (err) {
+        console.warn('[LiveClass] screen sender tuning skipped', err?.message);
+    }
+};
+
+const getScreenShareStream = async () => {
+    try {
+        return await mediaDevices.getDisplayMedia(SCREEN_SHARE_CONSTRAINTS);
+    } catch (err) {
+        if (err?.message === 'Screen share cancelled') throw err;
+        console.warn('[LiveClass] constrained screen capture failed, using default capture', err?.message);
+        return mediaDevices.getDisplayMedia({ video: true });
     }
 };
 
@@ -80,6 +116,7 @@ const LiveClass = ({ navigation, route }) => {
     const [liveSocket, setLiveSocket] = useState(null);
     const [chatVisible, setChatVisible] = useState(false);
     const [unreadChatCount, setUnreadChatCount] = useState(0);
+    const [chatNotificationVisible, setChatNotificationVisible] = useState(false);
     // null when no fullscreen view is open. Otherwise: { streamURL, label, fit, mirror }
     const [fullscreenSource, setFullscreenSource] = useState(null);
 
@@ -176,12 +213,13 @@ const LiveClass = ({ navigation, route }) => {
         remoteDescSet.current[key] = false;
 
         screenStreamRef.current.getTracks().forEach(t => {
-            pc.addTrack(t, screenStreamRef.current);
+            const sender = pc.addTrack(t, screenStreamRef.current);
+            if (t.kind === 'video') tuneScreenShareSender(sender);
         });
         pc.onicecandidate = (e) => {
             if (e.candidate) socket.emit('screen-ice-candidate', { to: peerId, candidate: e.candidate });
         };
-        await new Promise(r => setTimeout(r, Platform.OS === 'android' ? 800 : 100));
+        await new Promise(r => setTimeout(r, Platform.OS === 'android' ? 150 : 50));
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         socket.emit('screen-offer', { to: peerId, offer });
@@ -190,6 +228,7 @@ const LiveClass = ({ navigation, route }) => {
     // ─────────────────────────────────────────────────────────────────────
     useEffect(() => {
         let cancelled = false;
+        const connectedPeerIds = connectedPeers.current;
 
         (async () => {
             const ok = await requestMediaPermissions();
@@ -230,7 +269,11 @@ const LiveClass = ({ navigation, route }) => {
                 InCallManager.setKeepScreenOn(true);
             } catch {}
 
-            const socket = passedSocket || io(SERVER_URL, { transports: ['websocket'] });
+            const token = await AsyncStorage.getItem('sv_token');
+            const socket = passedSocket || io(SERVER_URL, {
+                transports: ['websocket'],
+                auth: { token },
+            });
             socketRef.current = socket;
             setLiveSocket(socket);
 
@@ -516,7 +559,7 @@ const LiveClass = ({ navigation, route }) => {
             peerConnections.current = {};
             iceCandidateBuffer.current = {};
             remoteDescSet.current = {};
-            connectedPeers.current.clear();
+            connectedPeerIds.clear();
             remoteStreamsRef.current = {};
             try { socketRef.current?.disconnect(); } catch {}
         };
@@ -560,7 +603,7 @@ const LiveClass = ({ navigation, route }) => {
     // ── Screen share ──
     const startScreenShare = async () => {
         try {
-            const screenStream = await mediaDevices.getDisplayMedia({ video: true });
+            const screenStream = await getScreenShareStream();
             screenStreamRef.current = screenStream;
             setSenderScreenURL(screenStream.toURL());
             setIsSharingScreen(true);
@@ -569,9 +612,7 @@ const LiveClass = ({ navigation, route }) => {
 
             socketRef.current?.emit('screen-share-started', { roomId, sharerName: myName });
             const peers = Array.from(connectedPeers.current);
-            for (const peerId of peers) {
-                await sendScreenOfferTo(socketRef.current, peerId);
-            }
+            await Promise.allSettled(peers.map(peerId => sendScreenOfferTo(socketRef.current, peerId)));
             screenStream.getTracks()[0].onended = () => stopScreenShare();
         } catch (e) {
             if (e.message !== 'Screen share cancelled') {
@@ -668,6 +709,50 @@ const LiveClass = ({ navigation, route }) => {
         if (!stillValid) setFullscreenSource(null);
     }, [fullscreenSource, featuredStreamURL, localStreamURL, remoteStreamURLs]);
 
+    useEffect(() => {
+        if (chatVisible || unreadChatCount <= 0) {
+            setChatNotificationVisible(false);
+            return undefined;
+        }
+
+        setChatNotificationVisible(true);
+        const timer = setTimeout(() => setChatNotificationVisible(false), 4500);
+        return () => clearTimeout(timer);
+    }, [chatVisible, unreadChatCount]);
+
+    const openChat = () => {
+        setFullscreenSource(null);
+        setChatVisible(true);
+        setUnreadChatCount(0);
+        setChatNotificationVisible(false);
+    };
+
+    const renderChatNotification = (fullscreen = false) => {
+        if (chatVisible || unreadChatCount <= 0 || !chatNotificationVisible) return null;
+        return (
+            <TouchableOpacity
+                style={[
+                    styles.chatNotification,
+                    fullscreen && styles.chatNotificationFullscreen,
+                ]}
+                onPress={openChat}
+                activeOpacity={0.86}
+            >
+                <View style={styles.chatNotificationIcon}>
+                    <AppIcon name="comments" size={15} color="#111111" />
+                </View>
+                <View style={styles.chatNotificationTextWrap}>
+                    <Text style={styles.chatNotificationTitle} numberOfLines={1}>
+                        New chat message
+                    </Text>
+                    <Text style={styles.chatNotificationSub} numberOfLines={1}>
+                        {unreadChatCount > 9 ? '9+' : unreadChatCount} unread
+                    </Text>
+                </View>
+            </TouchableOpacity>
+        );
+    };
+
     return (
         <View style={styles.container}>
             {/* TOP BAR */}
@@ -687,10 +772,7 @@ const LiveClass = ({ navigation, route }) => {
                 </View>
                 <TouchableOpacity
                     style={[styles.headerChatBtn, chatVisible && styles.headerChatBtnActive]}
-                    onPress={() => {
-                        setChatVisible(prev => !prev);
-                        setUnreadChatCount(0);
-                    }}
+                    onPress={() => (chatVisible ? setChatVisible(false) : openChat())}
                 >
                     <View style={styles.chatIconWrap}>
                         <AppIcon name="comments" size={17} color="#FFFFFF" />
@@ -896,6 +978,8 @@ const LiveClass = ({ navigation, route }) => {
             </View>
 
             {/* Fullscreen modal — works for the featured stream OR any tapped tile */}
+            {renderChatNotification()}
+
             <Modal
                 visible={!!fullscreenSource?.streamURL}
                 transparent={false}
@@ -910,7 +994,7 @@ const LiveClass = ({ navigation, route }) => {
                             style={styles.fullscreenVideo}
                             objectFit={fullscreenSource.fit || 'contain'}
                             mirror={!!fullscreenSource.mirror}
-                            zOrder={2}
+                            zOrder={0}
                         />
                     )}
                     <View style={styles.fullscreenTopBar}>
@@ -922,6 +1006,7 @@ const LiveClass = ({ navigation, route }) => {
                             <AppIcon name="compress" size={15} color="#FFFFFF" />
                         </TouchableOpacity>
                     </View>
+                    {renderChatNotification(true)}
                 </View>
             </Modal>
 
@@ -1035,6 +1120,41 @@ const makeStyles = (colors) => StyleSheet.create({
         paddingHorizontal: 3,
     },
     chatBadgeText: { color: '#111111', fontSize: 9, fontWeight: '900' },
+    chatNotification: {
+        position: 'absolute',
+        top: 112,
+        right: SPACING.md,
+        zIndex: 30,
+        elevation: 30,
+        maxWidth: 230,
+        minHeight: 48,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: SPACING.sm,
+        paddingHorizontal: SPACING.sm,
+        paddingVertical: 7,
+        borderRadius: RADIUS.md,
+        backgroundColor: 'rgba(16,18,26,0.94)',
+        borderWidth: 1,
+        borderColor: colors.warning + '88',
+    },
+    chatNotificationFullscreen: {
+        top: SPACING.xxxl + 56,
+        right: SPACING.md,
+        zIndex: 60,
+        elevation: 60,
+    },
+    chatNotificationIcon: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.warning,
+    },
+    chatNotificationTextWrap: { flex: 1, minWidth: 0 },
+    chatNotificationTitle: { color: '#FFFFFF', fontSize: SIZES.xs, fontWeight: '900' },
+    chatNotificationSub: { color: '#D4D6E0', fontSize: 10, fontWeight: '700', marginTop: 1 },
     livePill: {
         backgroundColor: colors.primary, paddingHorizontal: SPACING.sm,
         paddingVertical: 2, borderRadius: RADIUS.full, marginBottom: 3,
