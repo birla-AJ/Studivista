@@ -7,7 +7,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import Header from '../../components/Header';
 import BottomTabBar from '../../components/BottomTabBar';
 import AppIcon from '../../components/AppIcon';
-import { db } from '../../services/firebase';
+import { db } from '../../services/dataShim';
 import { subscribeClassesByBatches } from '../../services/firestoreService';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatDateLabel, formatTimeLabel, tsToDate } from '../../utils/format';
@@ -52,7 +52,7 @@ const StudentAttendance = ({ navigation }) => {
         setActive(screen);
         const routes = {
             StudentDashboard: 'StudentDashboard', JoinClass: 'JoinClass',
-            StudentRecordings: 'StudentRecordings',
+            AIChat: 'AIChat', StudentRecordings: 'StudentRecordings',
         };
         if (routes[screen]) navigation.navigate(routes[screen]);
     };

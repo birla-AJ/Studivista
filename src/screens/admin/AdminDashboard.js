@@ -7,7 +7,12 @@ import { useTheme } from '../../theme/ThemeContext';
 import BottomTabBar from '../../components/BottomTabBar';
 import Header from '../../components/Header';
 import AppIcon from '../../components/AppIcon';
-import { subscribeBatches, subscribeClasses, subscribeUsersByRole } from '../../services/firestoreService';
+import {
+    subscribeBatches,
+    subscribeClasses,
+    subscribeNotificationsForUser,
+    subscribeUsersByRole,
+} from '../../services/firestoreService';
 import { useAuth } from '../../contexts/AuthContext';
 import { tsToDate } from '../../utils/format';
 
@@ -51,6 +56,7 @@ const AdminDashboard = ({ navigation }) => {
     const [classes, setClasses] = useState([]);
     const [refreshing, setRefreshing] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
+    const [unreadCount, setUnreadCount] = useState(0);
 
     useEffect(() => {
         const u1 = subscribeUsersByRole('teacher', setTeachers);
@@ -59,6 +65,13 @@ const AdminDashboard = ({ navigation }) => {
         const u4 = subscribeClasses(setClasses);
         return () => { u1?.(); u2?.(); u3?.(); u4?.(); };
     }, [refreshKey]);
+
+    useEffect(() => {
+        if (!profile?.uid) return;
+        return subscribeNotificationsForUser(profile.uid, list => {
+            setUnreadCount((list || []).filter(n => !n.read).length);
+        });
+    }, [profile?.uid]);
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
@@ -95,7 +108,10 @@ const AdminDashboard = ({ navigation }) => {
                             <AppIcon name={isDark ? 'sun' : 'moon'} size={18} color={colors.text} />
                         </TouchableOpacity>
                         <TouchableOpacity onPress={() => navigation.navigate('Notifications')}>
-                            <AppIcon name="bell" size={20} color={colors.text} />
+                            <View style={{ position: 'relative' }}>
+                                <AppIcon name="bell" size={20} color={colors.text} />
+                                {unreadCount > 0 && <View style={styles.notifDot} />}
+                            </View>
                         </TouchableOpacity>
                     </View>
                 }
@@ -227,6 +243,11 @@ const makeStyles = (colors) => StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.bg },
     scroll: { flex: 1, paddingHorizontal: SPACING.base },
     rightRow: { flexDirection: 'row', gap: SPACING.base, alignItems: 'center' },
+    notifDot: {
+        position: 'absolute', top: -2, right: -2,
+        width: 8, height: 8, borderRadius: 4,
+        backgroundColor: colors.primary, borderWidth: 1, borderColor: colors.headerBg,
+    },
     welcomeCard: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
         backgroundColor: colors.surface, borderRadius: RADIUS.xl,
