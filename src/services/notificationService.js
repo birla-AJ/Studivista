@@ -5,13 +5,28 @@
  * Uses Socket.IO user rooms.
  * New:     uses Socket.io user rooms — server emits 'notification' event.
  */
-import { Platform, PermissionsAndroid } from 'react-native';
-import messaging from '@react-native-firebase/messaging';
+import { NativeModules, Platform, PermissionsAndroid } from 'react-native';
 import { apiFetch, disconnectSocket, getSocket } from './api';
 
 let reconnectHandler = null;
 let tokenRefreshUnsubscribe = null;
 let currentFcmToken = null;
+let messagingModule = null;
+let messagingUnavailableWarningShown = false;
+
+const getMessaging = () => {
+  if (!NativeModules.RNFBAppModule || !NativeModules.RNFBMessagingModule) {
+    if (!messagingUnavailableWarningShown) {
+      console.warn('Firebase native module unavailable; push token registration is disabled.');
+      messagingUnavailableWarningShown = true;
+    }
+    return null;
+  }
+  if (!messagingModule) {
+    messagingModule = require('@react-native-firebase/messaging').default;
+  }
+  return messagingModule;
+};
 
 // ── Register user with their socket room ──────────────────────────────────
 // Call this right after login (AuthContext does it automatically)
@@ -44,6 +59,8 @@ export const requestNotificationPermission = async () => {
     }
   }
   if (Platform.OS === 'ios') {
+    const messaging = getMessaging();
+    if (!messaging) return false;
     const status = await messaging().requestPermission();
     granted =
       status === messaging.AuthorizationStatus.AUTHORIZED ||
@@ -66,6 +83,8 @@ const saveToken = async token => {
 
 export const registerPushTokenForUser = async uid => {
   if (!uid) return null;
+  const messaging = getMessaging();
+  if (!messaging) return null;
   try {
     await messaging().registerDeviceForRemoteMessages();
     const token = await messaging().getToken();
