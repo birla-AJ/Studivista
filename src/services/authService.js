@@ -88,7 +88,7 @@ export const adminCreateTeacher = async ({
     method: 'POST',
     body: { email, password, name, role: 'teacher', subject, createdByUid },
   });
-  return newUser.uid;
+  return data.uid || data.user?.uid;
 };
 
 // ── Admin: create student ─────────────────────────────────────────────────
