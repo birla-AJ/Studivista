@@ -8,7 +8,6 @@ import Header from '../components/Header';
 import BottomTabBar from '../components/BottomTabBar';
 import AppIcon from '../components/AppIcon';
 import { useAuth } from '../contexts/AuthContext';
-import { signOut } from '../services/authService';
 import {
     subscribeBatches,
     subscribeBatchesByTeacher,
@@ -23,7 +22,7 @@ import { formatJoined } from '../utils/format';
 const Profile = ({ navigation }) => {
     const { colors, isDark, toggle } = useTheme();
     const styles = useMemo(() => makeStyles(colors), [colors]);
-    const { user, profile } = useAuth();
+    const { user, profile, signOut } = useAuth();
     const [active, setActive] = useState('Profile');
 
     const [batches, setBatches] = useState([]);
@@ -94,7 +93,10 @@ const Profile = ({ navigation }) => {
                 text: 'Sign out', style: 'destructive',
                 onPress: async () => {
                     await signOut();
-                    navigation.replace('RoleSelect');
+                    navigation.reset({
+                        index: 0,
+                        routes: [{ name: 'RoleSelect' }],
+                    });
                 },
             },
         ]);
