@@ -117,9 +117,14 @@ const sendToUser = async (pool, userId, notification) => {
     [userId],
   );
   const tokens = [...new Set(rows.map(row => row.token).filter(Boolean))];
+  if (!tokens.length) {
+    console.warn(`[FCM] No enabled push tokens for user ${userId}.`);
+    return [];
+  }
   return Promise.all(tokens.map(token => sendToToken(pool, token, notification)));
 };
 
 module.exports = {
+  initFirebase,
   sendToUser,
 };
