@@ -116,7 +116,11 @@ export const AuthProvider = ({ children }) => {
     }
     subscribedTopicsRef.current = new Set();
     if (presenceTimerRef.current) clearInterval(presenceTimerRef.current);
-    await unregisterPushTokenForUser();
+    try {
+      await unregisterPushTokenForUser();
+    } catch (e) {
+      console.warn('Push token unregister failed during sign out:', e.message);
+    }
     unregisterUserSocket();
 
     await _signOut();
