@@ -8,7 +8,12 @@ import Header from '../../components/Header';
 import ClassCard from '../../components/ClassCard';
 import BottomTabBar from '../../components/BottomTabBar';
 import AppIcon from '../../components/AppIcon';
-import { subscribeClassesByBatches, subscribeBatchesByIds, subscribeNotesByBatches } from '../../services/firestoreService';
+import {
+    subscribeClassesByBatches,
+    subscribeBatchesByIds,
+    subscribeNotesByBatches,
+    subscribeNotificationsForUser,
+} from '../../services/firestoreService';
 import { useAuth } from '../../contexts/AuthContext';
 import { tsToDate } from '../../utils/format';
 
@@ -22,18 +27,26 @@ const StudentDashboard = ({ navigation }) => {
     const [notes, setNotes] = useState([]);
     const [refreshing, setRefreshing] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const batchIds = useMemo(() => profile?.batchIds || [], [profile?.batchIds]);
 
     useEffect(() => {
-        const ids = profile?.batchIds || [];
-        if (ids.length === 0) {
+        if (batchIds.length === 0) {
             setClasses([]); setBatches([]); setNotes([]);
             return;
         }
-        const u1 = subscribeClassesByBatches(ids, setClasses);
-        const u2 = subscribeBatchesByIds(ids, setBatches);
-        const u3 = subscribeNotesByBatches(ids, setNotes);
+        const u1 = subscribeClassesByBatches(batchIds, setClasses);
+        const u2 = subscribeBatchesByIds(batchIds, setBatches);
+        const u3 = subscribeNotesByBatches(batchIds, setNotes);
         return () => { u1?.(); u2?.(); u3?.(); };
-    }, [profile?.batchIds?.join(','), refreshKey]);
+    }, [batchIds, refreshKey]);
+
+    useEffect(() => {
+        if (!profile?.uid) return;
+        return subscribeNotificationsForUser(profile.uid, list => {
+            setUnreadCount((list || []).filter(n => !n.read).length);
+        });
+    }, [profile?.uid]);
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
@@ -76,7 +89,7 @@ const StudentDashboard = ({ navigation }) => {
                         <TouchableOpacity onPress={() => navigation.navigate('Notifications')}>
                             <View style={{ position: 'relative' }}>
                                 <AppIcon name="bell" size={20} color={colors.text} />
-                                <View style={styles.notifDot} />
+                                {unreadCount > 0 && <View style={styles.notifDot} />}
                             </View>
                         </TouchableOpacity>
                     </View>

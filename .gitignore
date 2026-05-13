@@ -27,6 +27,7 @@ DerivedData
 build/
 .idea
 .gradle
+.gradle-user-home/
 local.properties
 *.iml
 *.hprof
@@ -35,12 +36,19 @@ local.properties
 !debug.keystore
 .kotlin/
 android/keystore.properties
+android/app/google-services.json
+android/app/google-services*.json
+ios/**/GoogleService-Info.plist
+studivista-server/secrets/
 
 # node.js
 #
 node_modules/
 npm-debug.log
 yarn-error.log
+metro.err.log
+metro.out.log
+src.zip
 
 # fastlane
 #

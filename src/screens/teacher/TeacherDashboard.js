@@ -10,8 +10,9 @@ import BottomTabBar from '../../components/BottomTabBar';
 import AppIcon from '../../components/AppIcon';
 import {
     subscribeBatchesByTeacher, subscribeClassesByTeacher,
-    subscribeUsersByRole, startLiveClass, fanOutNotificationToBatch,
+    subscribeUsersByRole, startLiveClass,
     subscribeNotesByTeacher,
+    subscribeNotificationsForUser,
 } from '../../services/firestoreService';
 import { useAuth } from '../../contexts/AuthContext';
 import { tsToDate } from '../../utils/format';
@@ -28,6 +29,7 @@ const TeacherDashboard = ({ navigation }) => {
     const [notes, setNotes] = useState([]);
     const [refreshing, setRefreshing] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
+    const [unreadCount, setUnreadCount] = useState(0);
 
     useEffect(() => {
         if (!user?.uid) return;
@@ -37,6 +39,13 @@ const TeacherDashboard = ({ navigation }) => {
         const u4 = subscribeNotesByTeacher(user.uid, setNotes);
         return () => { u1?.(); u2?.(); u3?.(); u4?.(); };
     }, [user?.uid, refreshKey]);
+
+    useEffect(() => {
+        if (!user?.uid) return;
+        return subscribeNotificationsForUser(user.uid, list => {
+            setUnreadCount((list || []).filter(n => !n.read).length);
+        });
+    }, [user?.uid]);
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
@@ -67,13 +76,6 @@ const TeacherDashboard = ({ navigation }) => {
     const handleStartClass = async (cls) => {
         try {
             await startLiveClass(cls.id);
-            await fanOutNotificationToBatch({
-                batchId: cls.batchId,
-                title: `${cls.title} is live`,
-                body: `${profile?.name || 'Your teacher'} just started the class.`,
-                type: 'class_start',
-                classId: cls.id,
-            });
             navigation.navigate('LiveClass', { cls });
         } catch (e) {
             Toast.error(e?.message || 'Please try again.', 'Could not start class');
@@ -91,7 +93,10 @@ const TeacherDashboard = ({ navigation }) => {
                             <AppIcon name={isDark ? 'sun' : 'moon'} size={18} color={colors.text} />
                         </TouchableOpacity>
                         <TouchableOpacity onPress={() => navigation.navigate('Notifications')}>
-                            <AppIcon name="bell" size={20} color={colors.text} />
+                            <View style={{ position: 'relative' }}>
+                                <AppIcon name="bell" size={20} color={colors.text} />
+                                {unreadCount > 0 && <View style={styles.notifDot} />}
+                            </View>
                         </TouchableOpacity>
                     </View>
                 }
@@ -258,6 +263,11 @@ const makeStyles = (colors) => StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.bg },
     scroll: { flex: 1, paddingHorizontal: SPACING.base },
     rightRow: { flexDirection: 'row', gap: SPACING.base, alignItems: 'center' },
+    notifDot: {
+        position: 'absolute', top: -2, right: -2,
+        width: 8, height: 8, borderRadius: 4,
+        backgroundColor: colors.primary, borderWidth: 1, borderColor: colors.headerBg,
+    },
     profileCard: {
         flexDirection: 'row', alignItems: 'center',
         backgroundColor: colors.surface, borderRadius: RADIUS.xl,

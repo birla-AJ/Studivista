@@ -10,7 +10,7 @@ import BottomTabBar from '../../components/BottomTabBar';
 import AppIcon from '../../components/AppIcon';
 import {
     subscribeClassesByTeacher, subscribeBatchesByTeacher,
-    startLiveClass, fanOutNotificationToBatch,
+    startLiveClass,
 } from '../../services/firestoreService';
 import { useAuth } from '../../contexts/AuthContext';
 import { Toast } from '../../components/Toast';
@@ -27,7 +27,7 @@ const FILTER_TABS = [
 const MyClasses = ({ navigation }) => {
     const { colors } = useTheme();
     const styles = useMemo(() => makeStyles(colors), [colors]);
-    const { user, profile } = useAuth();
+    const { user } = useAuth();
     const [active, setActive] = useState('MyClasses');
     const [filter, setFilter] = useState('All');
     const [classes, setClasses] = useState(null);
@@ -57,13 +57,6 @@ const MyClasses = ({ navigation }) => {
     const handleStart = async (cls) => {
         try {
             await startLiveClass(cls.id);
-            await fanOutNotificationToBatch({
-                batchId: cls.batchId,
-                title: `${cls.title} is live`,
-                body: `${profile?.name || 'Your teacher'} just started the class.`,
-                type: 'class_start',
-                classId: cls.id,
-            });
             navigation.navigate('LiveClass', { cls });
         } catch (e) {
             Toast.error(e?.message || 'Please try again.', 'Could not start class');
