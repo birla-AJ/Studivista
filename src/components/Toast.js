@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Text, StyleSheet, Platform, View } from 'react-native';
+import { Animated, Text, StyleSheet, Platform, TouchableOpacity, View } from 'react-native';
 import { SIZES, SPACING, RADIUS } from '../theme';
 import AppIcon from './AppIcon';
 
@@ -34,8 +34,9 @@ export const ToastHost = () => {
     const timerRef = useRef(null);
 
     useEffect(() => {
-        _show = ({ type = 'info', title, message, duration = 2500 }) => {
-            setData({ type, title, message });
+        _show = (opts = {}) => {
+            const { type = 'info', title, message, duration = 2500 } = opts;
+            setData({ ...opts, type, title, message });
 
             if (timerRef.current) clearTimeout(timerRef.current);
 
@@ -56,10 +57,21 @@ export const ToastHost = () => {
 
     if (!data) return null;
     const { bg, icon } = COLOR_MAP[data.type] || COLOR_MAP.info;
+    const hide = () => {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        Animated.parallel([
+            Animated.timing(slide, { toValue: -120, duration: 180, useNativeDriver: true }),
+            Animated.timing(opacity, { toValue: 0, duration: 180, useNativeDriver: true }),
+        ]).start(() => setData(null));
+    };
+    const handleAction = () => {
+        hide();
+        data.onAction?.();
+    };
 
     return (
         <Animated.View
-            pointerEvents="none"
+            pointerEvents="box-none"
             style={[
                 styles.toast,
                 { backgroundColor: bg, opacity, transform: [{ translateY: slide }] },
@@ -70,6 +82,11 @@ export const ToastHost = () => {
                 {!!data.title && <Text style={styles.title}>{data.title}</Text>}
                 {!!data.message && <Text style={styles.message}>{data.message}</Text>}
             </View>
+            {!!data.actionLabel && !!data.onAction && (
+                <TouchableOpacity style={styles.actionBtn} onPress={handleAction} activeOpacity={0.85}>
+                    <Text style={styles.actionText}>{data.actionLabel}</Text>
+                </TouchableOpacity>
+            )}
         </Animated.View>
     );
 };
@@ -88,6 +105,15 @@ const styles = StyleSheet.create({
     },
     title: { color: '#FFFFFF', fontSize: SIZES.sm, fontWeight: '800', letterSpacing: 0.3 },
     message: { color: '#FFFFFF', fontSize: SIZES.xs, fontWeight: '600', marginTop: 2, lineHeight: 18 },
+    actionBtn: {
+        backgroundColor: 'rgba(255,255,255,0.18)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.35)',
+        borderRadius: RADIUS.md,
+        paddingHorizontal: SPACING.md,
+        paddingVertical: SPACING.sm,
+    },
+    actionText: { color: '#FFFFFF', fontSize: SIZES.xs, fontWeight: '900' },
 });
 
 export default ToastHost;

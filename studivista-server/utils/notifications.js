@@ -2,7 +2,7 @@ const { v4 } = require('uuid');
 const { normalize } = require('./normalize');
 const { sendToUser } = require('./fcm');
 
-const createNotification = async (pool, io, data) => {
+const createNotification = async (pool, io, payload) => {
   const {
     userId,
     title,
@@ -10,7 +10,8 @@ const createNotification = async (pool, io, data) => {
     type = 'info',
     classId = null,
     batchId = null,
-  } = data || {};
+    data: pushData = null,
+  } = payload || {};
 
   if (!userId || !title || !body) return null;
 
@@ -23,6 +24,7 @@ const createNotification = async (pool, io, data) => {
   );
 
   const item = normalize(rows[0]);
+  if (pushData) item.data = pushData;
   io?.to(`user:${userId}`).emit('notification', item);
   sendToUser(pool, userId, item).catch(err => {
     console.warn('[FCM] User push failed:', err.message);

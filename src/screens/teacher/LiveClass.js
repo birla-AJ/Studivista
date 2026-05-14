@@ -895,6 +895,17 @@ const LiveClass = ({ navigation, route }) => {
                                 </Text>
                             </View>
                         )}
+                        <TouchableOpacity
+                            style={[
+                                styles.selfFlipBtn,
+                                (!cameraOn || !localStreamURL) && styles.selfFlipBtnDisabled,
+                            ]}
+                            onPress={flipCamera}
+                            disabled={!cameraOn || !localStreamURL}
+                            activeOpacity={0.85}
+                        >
+                            <AppIcon name="sync" size={12} color="#FFFFFF" />
+                        </TouchableOpacity>
                         <View style={styles.tileFooter}>
                             <Text style={styles.tileName} numberOfLines={1}>You</Text>
                             <View style={styles.tileBadges}>
@@ -1042,21 +1053,33 @@ const LiveClass = ({ navigation, route }) => {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                    style={[styles.ctrlBtn, !cameraOn && { opacity: 0.5 }]}
-                    onPress={flipCamera}
-                    disabled={!cameraOn}
-                >
-                    <AppIcon name="sync" size={18} color="#FFFFFF" />
-                    <Text style={styles.ctrlLabel}>{isFrontCamera ? 'Back' : 'Front'}</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
                     style={[styles.ctrlBtn, !speakerOn && styles.ctrlBtnOff]}
                     onPress={toggleSpeaker}
                 >
                     <AppIcon name={speakerOn ? 'volume-up' : 'volume-mute'} size={18} color="#FFFFFF" />
                     <Text style={styles.ctrlLabel}>Speaker</Text>
                 </TouchableOpacity>
+
+                {isTeacher && (
+                    <TouchableOpacity
+                        style={styles.ctrlBtn}
+                        onPress={() => {
+                            if (!cls?.batchId) {
+                                Toast.warning('This class is missing a batch link.', 'Cannot add note');
+                                return;
+                            }
+                            navigation.navigate('AddNote', {
+                                classId: cls.id,
+                                batchId: cls.batchId,
+                                batchName: cls.batchName,
+                                disallowVideo: true,
+                            });
+                        }}
+                    >
+                        <AppIcon name="sticky-note" size={18} color="#FFFFFF" />
+                        <Text style={styles.ctrlLabel}>Notes</Text>
+                    </TouchableOpacity>
+                )}
 
                 <TouchableOpacity
                     style={[styles.ctrlBtn, isSharingScreen && styles.ctrlBtnActive]}
@@ -1245,6 +1268,20 @@ const makeStyles = (colors) => StyleSheet.create({
     },
     tileName: { color: '#FFFFFF', fontSize: SIZES.xs, fontWeight: '700', flex: 1, marginRight: 4 },
     tileBadges: { flexDirection: 'row', gap: 4 },
+    selfFlipBtn: {
+        position: 'absolute',
+        top: 6,
+        right: 6,
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: 'rgba(0,0,0,0.72)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.22)',
+    },
+    selfFlipBtnDisabled: { opacity: 0.4 },
     tileActions: {
         position: 'absolute', top: 4, right: 4,
         flexDirection: 'column', gap: 4,

@@ -103,6 +103,32 @@ const { pool } = require('./db');
       ALTER TABLE sv_classes
         ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ;
 
+      ALTER TABLE sv_notes
+        ADD COLUMN IF NOT EXISTS class_id TEXT,
+        ADD COLUMN IF NOT EXISTS note_type TEXT NOT NULL DEFAULT 'text',
+        ADD COLUMN IF NOT EXISTS file_url TEXT,
+        ADD COLUMN IF NOT EXISTS file_name TEXT,
+        ADD COLUMN IF NOT EXISTS file_size BIGINT,
+        ADD COLUMN IF NOT EXISTS duration_sec INT,
+        ADD COLUMN IF NOT EXISTS thumb_url TEXT;
+
+      UPDATE sv_notes SET note_type='text' WHERE note_type IS NULL;
+
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conname = 'chk_note_type'
+            AND conrelid = 'sv_notes'::regclass
+        ) THEN
+          ALTER TABLE sv_notes
+            ADD CONSTRAINT chk_note_type
+            CHECK (note_type IN ('text','pdf','image','video','audio','voice','link'));
+        END IF;
+      END
+      $$;
+
       CREATE INDEX IF NOT EXISTS idx_users_email      ON sv_users(email);
       CREATE INDEX IF NOT EXISTS idx_users_role       ON sv_users(role);
       CREATE INDEX IF NOT EXISTS idx_batches_teacher  ON sv_batches(teacher_id);
@@ -110,6 +136,7 @@ const { pool } = require('./db');
       CREATE INDEX IF NOT EXISTS idx_classes_teacher  ON sv_classes(teacher_id);
       CREATE INDEX IF NOT EXISTS idx_classes_reminder ON sv_classes(status,scheduled_at,reminder_sent_at);
       CREATE INDEX IF NOT EXISTS idx_notes_batch      ON sv_notes(batch_id);
+      CREATE INDEX IF NOT EXISTS idx_notes_class_id   ON sv_notes(class_id);
       CREATE INDEX IF NOT EXISTS idx_notes_teacher    ON sv_notes(teacher_id);
       CREATE INDEX IF NOT EXISTS idx_notif_user       ON sv_notifications(user_id);
       CREATE INDEX IF NOT EXISTS idx_attend_class     ON sv_attendance(class_id);

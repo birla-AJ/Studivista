@@ -72,6 +72,7 @@ const sendToToken = async (pool, token, notification) => {
     type = 'info',
     classId = '',
     batchId = '',
+    data = {},
   } = notification || {};
 
   if (!token || !title || !body) return { ok: false, skipped: true };
@@ -85,6 +86,7 @@ const sendToToken = async (pool, token, notification) => {
         type,
         classId,
         batchId,
+        ...data,
       }),
       android: {
         priority: 'high',
