@@ -7,7 +7,8 @@
  * This is required because screens like ScheduleClass call:
  *   existing.scheduledAt.toDate().getDate()  ← direct call, no helper
  */
-import { apiFetch, subscribeChannel, getSocket } from './api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiFetch, subscribeChannel, getSocket, SERVER_URL } from './api';
 
 // ─── Timestamp wrapper ────────────────────────────────────────────────────
 // Converts ISO string → { toDate(), toMillis() }
@@ -358,11 +359,60 @@ export const subscribeNotesByBatches = (batchIds, cb) => {
   });
 };
 
-// createNote in original returns ref.id (string)
-export const createNote = async data => {
-  const result = await apiFetch('/api/notes', { method: 'POST', body: data });
-  return result.id || result;
+export const subscribeNotesByClass = (classId, cb) => {
+  if (!classId) {
+    cb([]);
+    return () => {};
+  }
+  let list = [];
+  apiFetch(`/api/notes?classId=${classId}`)
+    .then(d => {
+      list = wrapList(d);
+      cb(list);
+    })
+    .catch(() => {});
+  return subscribeChannel(`notes:class:${classId}`, 'data-update', p => {
+    if (p.type === 'note-added') list = [wrapItem(p.data), ...list];
+    else if (p.type === 'note-deleted')
+      list = list.filter(n => n.id !== p.data.id);
+    cb(list);
+  });
+};
+
+// JSON notes use apiFetch; FormData uploads use XHR so React Native reports progress.
+export const createNote = async (data, onProgress) => {
+  const isFormData =
+    typeof FormData !== 'undefined' && data instanceof FormData;
+  if (!isFormData) {
+    const result = await apiFetch('/api/notes', { method: 'POST', body: data });
+    return result.id || result;
+  }
+
+  return new Promise(async (resolve, reject) => {
+    const token = await AsyncStorage.getItem('sv_token');
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${SERVER_URL}/api/notes`);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.upload.onprogress = e => {
+      if (e.lengthComputable) onProgress?.(e.loaded / e.total);
+    };
+    xhr.onload = () => {
+      let parsed = null;
+      try {
+        parsed = JSON.parse(xhr.responseText || '{}');
+      } catch {
+        parsed = {};
+      }
+      if (xhr.status < 300) resolve(parsed.id || wrapItem(parsed));
+      else reject(new Error(parsed.error || `HTTP ${xhr.status}`));
+    };
+    xhr.onerror = () => reject(new Error('Upload failed'));
+    xhr.send(data);
+  });
 };
 
 export const deleteNote = id =>
   apiFetch(`/api/notes/${id}`, { method: 'DELETE' });
+
+export const getNote = id =>
+  apiFetch(`/api/notes/${id}`).then(wrapItem);
