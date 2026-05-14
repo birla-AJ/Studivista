@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { ThemeProvider } from './src/theme/ThemeContext';
@@ -49,6 +49,7 @@ import WaitingScreen from './src/screens/WaitingScreen';
 import Profile from './src/screens/Profile';
 
 const Stack = createNativeStackNavigator();
+const navigationRef = createNavigationContainerRef();
 
 const NotificationListener = () => {
   const { user } = useAuth();
@@ -57,6 +58,23 @@ const NotificationListener = () => {
     if (!user?.uid) return undefined;
     return onForegroundMessage(notification => {
       if (!notification?.title && !notification?.body) return;
+      const screen = notification?.data?.screen;
+      const noteId = notification?.data?.noteId;
+      if (screen === 'NoteDetail' && noteId) {
+        Toast.show({
+          type: 'info',
+          title: notification.title || 'New note',
+          message: notification.body,
+          duration: 7000,
+          actionLabel: 'View',
+          onAction: () => {
+            if (navigationRef.isReady()) {
+              navigationRef.navigate('NoteDetail', { noteId });
+            }
+          },
+        });
+        return;
+      }
       Toast.info(notification.body, notification.title || 'Notification');
     });
   }, [user?.uid]);
@@ -68,7 +86,7 @@ export default function App() {
   return (
     <ThemeProvider>
     <AuthProvider>
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef}>
         <NotificationListener />
         <Stack.Navigator
           initialRouteName="Splash"

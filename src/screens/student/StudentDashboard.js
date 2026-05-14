@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, RefreshControl,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SIZES, SPACING, RADIUS, SHADOWS } from '../../theme';
 import { useTheme } from '../../theme/ThemeContext';
 import Header from '../../components/Header';
@@ -28,6 +29,7 @@ const StudentDashboard = ({ navigation }) => {
     const [refreshing, setRefreshing] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [notesLastSeen, setNotesLastSeen] = useState(0);
     const batchIds = useMemo(() => profile?.batchIds || [], [profile?.batchIds]);
 
     useEffect(() => {
@@ -47,6 +49,17 @@ const StudentDashboard = ({ navigation }) => {
             setUnreadCount((list || []).filter(n => !n.read).length);
         });
     }, [profile?.uid]);
+
+    useEffect(() => {
+        const loadLastSeen = () => {
+            AsyncStorage.getItem('notes_last_seen')
+                .then(value => setNotesLastSeen(Number(value || 0)))
+                .catch(() => setNotesLastSeen(0));
+        };
+        loadLastSeen();
+        const unsub = navigation.addListener?.('focus', loadLastSeen);
+        return unsub;
+    }, [navigation]);
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
@@ -75,6 +88,10 @@ const StudentDashboard = ({ navigation }) => {
     }).length, [classes]);
 
     const totalForBatch = (batchId) => batches.find(b => b.id === batchId)?.studentIds?.length || 0;
+    const newNotesCount = useMemo(() => notes.filter(n => {
+        const date = tsToDate(n.createdAt);
+        return date && date.getTime() > notesLastSeen;
+    }).length, [notes, notesLastSeen]);
 
     return (
         <SafeAreaView style={styles.container}>
@@ -217,6 +234,11 @@ const StudentDashboard = ({ navigation }) => {
                             onPress={() => navigation.navigate(a.screen)}
                             activeOpacity={0.8}
                         >
+                            {a.screen === 'StudentNotes' && newNotesCount > 0 && (
+                                <View style={styles.quickBadge}>
+                                    <Text style={styles.quickBadgeText}>{newNotesCount > 99 ? '99+' : newNotesCount}</Text>
+                                </View>
+                            )}
                             <View style={[styles.quickIcon, { backgroundColor: a.color + '20' }]}>
                                 <AppIcon name={a.icon} size={28} color={a.color} />
                             </View>
@@ -239,11 +261,13 @@ const StudentDashboard = ({ navigation }) => {
                         <Text style={styles.notesChipSub}>
                             {notes.length === 0
                                 ? 'No notes yet from your teachers'
-                                : `${notes.length} note${notes.length === 1 ? '' : 's'} from your teachers`}
+                                : newNotesCount > 0
+                                    ? `${newNotesCount} new of ${notes.length} note${notes.length === 1 ? '' : 's'}`
+                                    : `${notes.length} note${notes.length === 1 ? '' : 's'} from your teachers`}
                         </Text>
                     </View>
                     <View style={[styles.notesCountPill, { backgroundColor: colors.studentColor }]}>
-                        <Text style={styles.notesCountText}>{notes.length}</Text>
+                        <Text style={styles.notesCountText}>{newNotesCount || notes.length}</Text>
                     </View>
                 </TouchableOpacity>
 
@@ -315,7 +339,22 @@ const makeStyles = (colors) => StyleSheet.create({
         flex: 1, minWidth: '45%', backgroundColor: colors.surface,
         borderRadius: RADIUS.lg, padding: SPACING.md, alignItems: 'center',
         gap: SPACING.sm, borderWidth: 1, ...SHADOWS.small,
+        position: 'relative',
     },
+    quickBadge: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        minWidth: 22,
+        height: 22,
+        borderRadius: 11,
+        backgroundColor: colors.primary,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 5,
+        zIndex: 2,
+    },
+    quickBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },
     quickIcon: { width: 56, height: 56, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center' },
     quickLabel: { fontSize: SIZES.sm, color: colors.text, fontWeight: '700', textAlign: 'center' },
     sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: SPACING.base, marginBottom: SPACING.sm },

@@ -38,7 +38,7 @@ const storage = multer.diskStorage({
     cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`);
   },
 });
-const upload = multer({ storage, limits: { fileSize: 40 * 1024 * 1024 } });
+const upload = multer({ storage, limits: { fileSize: 200 * 1024 * 1024 } });
 
 app.use('/uploads', express.static(uploadsDir));
 
@@ -55,7 +55,7 @@ app.get('/download/:filename', (req, res) => {
 const chatUpload = (req, res, next) => {
   upload.single('file')(req, res, err => {
     if (!err) return next();
-    if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'Max file size is 40MB.' });
+    if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'Max file size is 200MB.' });
     res.status(400).json({ error: err.message || 'Upload failed.' });
   });
 };
