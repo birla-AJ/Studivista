@@ -10,7 +10,7 @@
  * uses an AsyncStorage session.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { apiFetch } from './api';
+import { apiFetch, SERVER_URL } from './api';
 
 const TOKEN_KEY = 'sv_token';
 const PROFILE_KEY = 'sv_profile';
@@ -74,6 +74,45 @@ export const refreshProfile = async () => {
   const user = await apiFetch('/api/auth/me');
   await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(user));
   return user;
+};
+
+export const updateProfileAvatar = async (uid, file) => {
+  if (!uid) throw new Error('User is missing.');
+  if (!file?.uri) throw new Error('Choose an image first.');
+
+  const token = await AsyncStorage.getItem(TOKEN_KEY);
+  const formData = new FormData();
+  formData.append('file', {
+    uri: file.uri,
+    name: file.name || `profile-${Date.now()}.jpg`,
+    type: file.type || 'image/jpeg',
+  });
+
+  const uploaded = await new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${SERVER_URL}/chat-upload`);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.onload = () => {
+      let parsed = {};
+      try {
+        parsed = JSON.parse(xhr.responseText || '{}');
+      } catch {
+        parsed = {};
+      }
+      if (xhr.status < 300) resolve(parsed);
+      else reject(new Error(parsed.error || `HTTP ${xhr.status}`));
+    };
+    xhr.onerror = () => reject(new Error('Profile picture upload failed.'));
+    xhr.send(formData);
+  });
+
+  if (!uploaded?.url) throw new Error('Upload did not return an image URL.');
+  await apiFetch(`/api/users/${uid}`, {
+    method: 'PATCH',
+    body: { avatar: uploaded.url },
+  });
+
+  return refreshProfile();
 };
 
 // ── Admin: create teacher ─────────────────────────────────────────────────

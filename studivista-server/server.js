@@ -170,14 +170,14 @@ io.on('connection', socket => {
 
     const existingIds = Object.keys(rooms[roomId]);
     const existingDetailed = Object.entries(rooms[roomId]).map(([id, info]) => ({
-      userId: id, userRole: info.role, name: info.name,
+      userId: id, userRole: info.role, name: info.name, handRaised: !!info.handRaised,
     }));
 
     socket.emit('room-users', { users: existingIds });
     socket.emit('existing-users', existingDetailed);
     socket.to(roomId).emit('user-joined', { userId: socket.id, userRole: role, name });
 
-    rooms[roomId][socket.id] = { role, name };
+    rooms[roomId][socket.id] = { role, name, handRaised: false };
     socket.join(roomId);
     socket.roomId = roomId;
     socket.userRole = role;
@@ -271,6 +271,20 @@ io.on('connection', socket => {
   });
   socket.on('media-state', ({ micOn, cameraOn }) => {
     if (socket.roomId) socket.to(socket.roomId).emit('media-state', { from: socket.id, micOn, cameraOn });
+  });
+
+  socket.on('hand-raise', ({ roomId, raised, name }) => {
+    const targetRoom = roomId || socket.roomId;
+    if (!targetRoom) return;
+    const handRaised = !!raised;
+    if (rooms[targetRoom]?.[socket.id]) {
+      rooms[targetRoom][socket.id].handRaised = handRaised;
+    }
+    io.to(targetRoom).emit('hand-raise', {
+      from: socket.id,
+      name: name || socket.displayName || 'Student',
+      raised: handRaised,
+    });
   });
 
   socket.on('class-ended', ({ roomId }) => {

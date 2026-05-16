@@ -101,6 +101,7 @@ const LiveClass = ({ navigation, route }) => {
     const [micOn, setMicOn] = useState(true);
     const [cameraOn, setCameraOn] = useState(true);
     const [speakerOn, setSpeakerOn] = useState(true);
+    const [handRaised, setHandRaised] = useState(false);
     const [isFrontCamera, setIsFrontCamera] = useState(true);
 
     const [isSharingScreen, setIsSharingScreen] = useState(false);
@@ -109,7 +110,7 @@ const LiveClass = ({ navigation, route }) => {
     const [screenShareStreamURL, setScreenShareStreamURL] = useState(null);
 
     const [pendingJoins, setPendingJoins] = useState([]);
-    const [participants, setParticipants] = useState([]); // { id, name, role, micOn, cameraOn }
+    const [participants, setParticipants] = useState([]); // { id, name, role, micOn, cameraOn, handRaised }
     const [remoteStreamURLs, setRemoteStreamURLs] = useState({});
     const [leftToast, setLeftToast] = useState(null);
     const [classEnded, setClassEnded] = useState(false);
@@ -309,7 +310,7 @@ const LiveClass = ({ navigation, route }) => {
                         .filter(u => !seen.has(u.userId))
                         .map(u => ({
                             id: u.userId, name: u.name || 'User',
-                            role: u.userRole, micOn: true, cameraOn: true,
+                            role: u.userRole, micOn: true, cameraOn: true, handRaised: !!u.handRaised,
                         }));
                     return [...added, ...prev];
                 });
@@ -326,7 +327,7 @@ const LiveClass = ({ navigation, route }) => {
                     if (prev.find(p => p.id === userId)) return prev;
                     return [{
                         id: userId, name: name || 'Student', role: userRole,
-                        micOn: true, cameraOn: true,
+                        micOn: true, cameraOn: true, handRaised: false,
                     }, ...prev];
                 });
                 if (isTeacher && userRole !== 'host' && userRole !== 'teacher') {
@@ -395,6 +396,20 @@ const LiveClass = ({ navigation, route }) => {
                 setParticipants(prev =>
                     prev.map(p => p.id === from ? { ...p, micOn: !!m, cameraOn: !!c } : p),
                 );
+            });
+
+            socket.on('hand-raise', ({ from, name, raised }) => {
+                if (from === socket.id) {
+                    setHandRaised(!!raised);
+                    return;
+                }
+                setParticipants(prev =>
+                    prev.map(p => p.id === from ? { ...p, handRaised: !!raised } : p),
+                );
+                if (isTeacher && raised) {
+                    Vibration.vibrate(Platform.OS === 'android' ? 80 : 40);
+                    Toast.info(`${name || 'Student'} raised their hand.`, 'Hand raised');
+                }
             });
 
             // ── Teacher → student: forced controls ──
@@ -598,6 +613,11 @@ const LiveClass = ({ navigation, route }) => {
         const next = !speakerOn;
         try { InCallManager.setSpeakerphoneOn(next); } catch {}
         setSpeakerOn(next);
+    };
+    const toggleHandRaise = () => {
+        const next = !handRaised;
+        setHandRaised(next);
+        socketRef.current?.emit('hand-raise', { roomId, raised: next, name: myName });
     };
 
     // ── Screen share ──
@@ -909,6 +929,7 @@ const LiveClass = ({ navigation, route }) => {
                         <View style={styles.tileFooter}>
                             <Text style={styles.tileName} numberOfLines={1}>You</Text>
                             <View style={styles.tileBadges}>
+                                {handRaised && <AppIcon name="hand-paper" size={10} color={colors.warning} />}
                                 {!micOn && <AppIcon name="microphone-slash" size={10} color={colors.danger} />}
                                 {!cameraOn && <AppIcon name="video-slash" size={10} color={colors.danger} />}
                             </View>
@@ -952,6 +973,7 @@ const LiveClass = ({ navigation, route }) => {
                                 <View style={styles.tileFooter}>
                                     <Text style={styles.tileName} numberOfLines={1}>{p.name}</Text>
                                     <View style={styles.tileBadges}>
+                                        {p.handRaised && <AppIcon name="hand-paper" size={10} color={colors.warning} />}
                                         {!mic && <AppIcon name="microphone-slash" size={10} color={colors.danger} />}
                                         {!camOn && <AppIcon name="video-slash" size={10} color={colors.danger} />}
                                     </View>
@@ -1059,6 +1081,16 @@ const LiveClass = ({ navigation, route }) => {
                     <AppIcon name={speakerOn ? 'volume-up' : 'volume-mute'} size={18} color="#FFFFFF" />
                     <Text style={styles.ctrlLabel}>Speaker</Text>
                 </TouchableOpacity>
+
+                {!isTeacher && (
+                    <TouchableOpacity
+                        style={[styles.ctrlBtn, handRaised && styles.ctrlBtnHandRaised]}
+                        onPress={toggleHandRaise}
+                    >
+                        <AppIcon name="hand-paper" size={18} color="#FFFFFF" />
+                        <Text style={styles.ctrlLabel}>{handRaised ? 'Lower' : 'Raise'}</Text>
+                    </TouchableOpacity>
+                )}
 
                 {isTeacher && (
                     <TouchableOpacity
@@ -1306,6 +1338,7 @@ const makeStyles = (colors) => StyleSheet.create({
     },
     ctrlBtnOff: { backgroundColor: colors.danger + '88' },
     ctrlBtnActive: { backgroundColor: colors.primary, borderWidth: 2, borderColor: colors.primary },
+    ctrlBtnHandRaised: { backgroundColor: colors.warning },
     ctrlBtnEnd: { backgroundColor: colors.danger },
     ctrlLabel: { color: '#FFFFFF', fontSize: 9, fontWeight: '700' },
 

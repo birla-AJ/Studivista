@@ -1,13 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Image, Alert,
+    View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Image, Alert, ActivityIndicator, Platform,
 } from 'react-native';
+import { errorCodes, isErrorWithCode, pick, types } from '@react-native-documents/picker';
 import { SIZES, SPACING, RADIUS, SHADOWS } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
 import Header from '../components/Header';
 import BottomTabBar from '../components/BottomTabBar';
 import AppIcon from '../components/AppIcon';
 import { useAuth } from '../contexts/AuthContext';
+import { updateProfileAvatar } from '../services/authService';
+import { Toast } from '../components/Toast';
 import {
     subscribeBatches,
     subscribeBatchesByTeacher,
@@ -22,8 +25,9 @@ import { formatJoined } from '../utils/format';
 const Profile = ({ navigation }) => {
     const { colors, isDark, toggle } = useTheme();
     const styles = useMemo(() => makeStyles(colors), [colors]);
-    const { user, profile, signOut } = useAuth();
+    const { user, profile, signOut, setSession } = useAuth();
     const [active, setActive] = useState('Profile');
+    const [avatarSaving, setAvatarSaving] = useState(false);
 
     const [batches, setBatches] = useState([]);
     const [classes, setClasses] = useState([]);
@@ -34,6 +38,7 @@ const Profile = ({ navigation }) => {
     const isTeacher = profile?.role === 'teacher';
     const isStudent = profile?.role === 'student';
     const role = profile?.role || 'student';
+    const profileBatchIds = useMemo(() => profile?.batchIds || [], [profile]);
 
     // Live counts for the stats row.
     useEffect(() => {
@@ -52,12 +57,11 @@ const Profile = ({ navigation }) => {
             return () => { u1?.(); u2?.(); u3?.(); };
         }
         if (isStudent) {
-            const ids = profile?.batchIds || [];
-            const u1 = subscribeBatchesByIds(ids, setBatches);
-            const u2 = subscribeClassesByBatches(ids, setClasses);
+            const u1 = subscribeBatchesByIds(profileBatchIds, setBatches);
+            const u2 = subscribeClassesByBatches(profileBatchIds, setClasses);
             return () => { u1?.(); u2?.(); };
         }
-    }, [user?.uid, isAdmin, isTeacher, isStudent, profile?.batchIds?.join(',')]);
+    }, [user?.uid, isAdmin, isTeacher, isStudent, profileBatchIds]);
 
     const myBatchIds = useMemo(() => batches.map(b => b.id), [batches]);
     const myStudents = useMemo(
@@ -84,7 +88,35 @@ const Profile = ({ navigation }) => {
         ];
 
     const initial = (profile?.name || profile?.email || '?').charAt(0).toUpperCase();
-    const photoURL = profile?.photoURL;
+    const photoURL = profile?.avatar || profile?.photoURL;
+
+    const normalizeUploadUri = uri =>
+        Platform.OS === 'android' && uri && !uri.includes('://') ? `file://${uri}` : uri;
+
+    const handleAvatarPress = async () => {
+        if (avatarSaving) return;
+        try {
+            const [selected] = await pick({
+                type: [types.images],
+                allowMultiSelection: false,
+            });
+            if (!selected) return;
+
+            setAvatarSaving(true);
+            const nextProfile = await updateProfileAvatar(user.uid, {
+                uri: normalizeUploadUri(selected.uri),
+                name: selected.name || `profile-${user.uid}.jpg`,
+                type: selected.type || 'image/jpeg',
+            });
+            await setSession(nextProfile);
+            Toast.success('Profile picture saved.');
+        } catch (e) {
+            if (isErrorWithCode(e) && e.code === errorCodes.OPERATION_CANCELED) return;
+            Toast.error(e?.message || 'Could not save profile picture.', 'Profile picture');
+        } finally {
+            setAvatarSaving(false);
+        }
+    };
 
     const handleLogout = () => {
         Alert.alert('Log out?', 'Sign out of this account?', [
@@ -112,7 +144,14 @@ const Profile = ({ navigation }) => {
             <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
                 {/* HERO CARD */}
                 <View style={styles.hero}>
-                    <View style={[styles.avatarRing, { borderColor: roleColor + '88' }]}>
+                    <TouchableOpacity
+                        style={[styles.avatarRing, { borderColor: roleColor + '88' }]}
+                        onPress={handleAvatarPress}
+                        activeOpacity={0.82}
+                        accessibilityRole="button"
+                        accessibilityLabel="Change profile picture"
+                        disabled={avatarSaving}
+                    >
                         {photoURL ? (
                             <Image source={{ uri: photoURL }} style={styles.avatar} />
                         ) : (
@@ -121,9 +160,13 @@ const Profile = ({ navigation }) => {
                             </View>
                         )}
                         <View style={[styles.editAvatarBtn, { backgroundColor: colors.primary }]}>
-                            <AppIcon name="camera" size={12} color="#FFFFFF" />
+                            {avatarSaving ? (
+                                <ActivityIndicator size="small" color="#FFFFFF" />
+                            ) : (
+                                <AppIcon name="camera" size={12} color="#FFFFFF" />
+                            )}
                         </View>
-                    </View>
+                    </TouchableOpacity>
                     <Text style={styles.name} numberOfLines={1}>{profile?.name || 'User'}</Text>
                     <View style={[styles.roleBadge, { backgroundColor: roleColor + '22', borderColor: roleColor + '55' }]}>
                         <Text style={[styles.roleText, { color: roleColor }]}>{roleLabel}</Text>
