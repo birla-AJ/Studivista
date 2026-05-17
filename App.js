@@ -2,8 +2,10 @@ import React, { useEffect } from 'react';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { LiveClassPipProvider } from './src/contexts/LiveClassPipContext';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import ToastHost, { Toast } from './src/components/Toast';
+import LiveClassMiniPip from './src/components/LiveClassMiniPip';
 import { onForegroundMessage } from './src/services/notificationService';
 
 // Auth Screens
@@ -22,6 +24,7 @@ import AddTeacher from './src/screens/admin/AddTeacher';
 import TeacherList from './src/screens/admin/TeacherList';
 import BatchDetail from './src/screens/admin/BatchDetail';
 import CreateStudent from './src/screens/admin/CreateStudent';
+import AddCourse from './src/screens/admin/AddCourse';
 
 // Teacher Screens
 import TeacherDashboard from './src/screens/teacher/TeacherDashboard';
@@ -40,6 +43,9 @@ import JoinClass from './src/screens/student/JoinClass';
 import StudentAttendance from './src/screens/student/StudentAttendance';
 import AIChat from './src/screens/student/AIChat';
 import StudentNotes from './src/screens/student/StudentNotes';
+import StudentCourses from './src/screens/student/StudentCourses';
+import CourseDetail from './src/screens/student/CourseDetail';
+import Payment from './src/screens/student/Payment';
 
 // Shared Screens
 import NotificationsScreen from './src/screens/NotificationsScreen';
@@ -86,6 +92,7 @@ export default function App() {
   return (
     <ThemeProvider>
     <AuthProvider>
+      <LiveClassPipProvider>
       <NavigationContainer ref={navigationRef}>
         <NotificationListener />
         <Stack.Navigator
@@ -108,6 +115,7 @@ export default function App() {
           <Stack.Screen name="TeacherList" component={TeacherList} />
           <Stack.Screen name="BatchDetail" component={BatchDetail} />
           <Stack.Screen name="CreateStudent" component={CreateStudent} />
+          <Stack.Screen name="AddCourse" component={AddCourse} />
 
           {/* Teacher */}
           <Stack.Screen name="TeacherDashboard" component={TeacherDashboard} />
@@ -129,6 +137,9 @@ export default function App() {
           </Stack.Screen>
           <Stack.Screen name="StudentAttendance" component={StudentAttendance} />
           <Stack.Screen name="StudentNotes" component={StudentNotes} />
+          <Stack.Screen name="StudentCourses" component={StudentCourses} />
+          <Stack.Screen name="CourseDetail" component={CourseDetail} />
+          <Stack.Screen name="Payment" component={Payment} options={{ animation: 'slide_from_bottom' }} />
 
           {/* Shared */}
           <Stack.Screen name="Notifications" component={NotificationsScreen} />
@@ -137,8 +148,10 @@ export default function App() {
           <Stack.Screen name="Waiting" component={WaitingScreen} />
           <Stack.Screen name="Profile" component={Profile} />
         </Stack.Navigator>
+        <LiveClassMiniPip navigationRef={navigationRef} />
       </NavigationContainer>
       <ToastHost />
+      </LiveClassPipProvider>
     </AuthProvider>
     </ThemeProvider>
   );

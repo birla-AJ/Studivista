@@ -3,6 +3,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
+const cors = require('cors');
 const multer = require('multer');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
@@ -13,19 +14,36 @@ const { pool } = require('./config/db');
 const { initFirebase } = require('./utils/fcm');
 
 const app = express();
-const corsOrigin = process.env.CORS_ORIGIN
+const allowedOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim()).filter(Boolean)
-  : false;
+  : ['*'];
+const isWildcardCors = allowedOrigins.includes('*');
+const corsOptions = {
+  origin(origin, cb) {
+    if (!origin || isWildcardCors || allowedOrigins.includes(origin)) {
+      return cb(null, true);
+    }
+    return cb(new Error(`CORS blocked for origin: ${origin}`));
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+};
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: corsOrigin },
+  cors: {
+    origin: isWildcardCors ? '*' : allowedOrigins,
+    methods: corsOptions.methods,
+    credentials: true,
+  },
   maxHttpBufferSize: 1e8,
   pingTimeout: 20000,
   pingInterval: 10000,
 });
 
 app.use(express.json());
-app.use(require('cors')({ origin: corsOrigin }));
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // ─── File Upload Setup ────────────────────────────────────────────────────
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -88,9 +106,11 @@ app.get('/health', (_req, res) => {
 // ─── In-memory room state ─────────────────────────────────────────────────
 const rooms = {};
 const pendingRequests = {};
+const pendingScreenShareRequests = {};
 const roomSharers = {};
 const isHostRole = r => r === 'host' || r === 'teacher' || r === 'admin';
 const canHost = user => isAdmin(user) || isTeacher(user);
+const socketIdentity = socket => socket.user?.uid || socket.id;
 
 // ─── Helper: emit real-time data update to subscribed clients ─────────────
 // Clients subscribe to channels like 'sub:users:teacher', 'sub:batches', etc.
@@ -168,8 +188,29 @@ io.on('connection', socket => {
     role = canHost(socket.user) ? 'host' : 'participant';
     if (!rooms[roomId]) rooms[roomId] = {};
 
-    const existingIds = Object.keys(rooms[roomId]);
-    const existingDetailed = Object.entries(rooms[roomId]).map(([id, info]) => ({
+    const identity = socketIdentity(socket);
+    if (socket.roomId === roomId && rooms[roomId][socket.id]) {
+      rooms[roomId][socket.id] = { ...rooms[roomId][socket.id], role, name, identity };
+      socket.userRole = role;
+      socket.displayName = name;
+      return;
+    }
+
+    Object.entries(rooms[roomId]).forEach(([id, info]) => {
+      if (id === socket.id || info.identity !== identity) return;
+      const staleSocket = io.sockets.sockets.get(id);
+      if (staleSocket) {
+        staleSocket.leave(roomId);
+        staleSocket.roomId = null;
+      }
+      delete rooms[roomId][id];
+      socket.to(roomId).emit('user-left', { userId: id, userRole: info.role, name: info.name });
+    });
+
+    const existingIds = Object.keys(rooms[roomId]).filter(id => id !== socket.id);
+    const existingDetailed = Object.entries(rooms[roomId])
+      .filter(([id]) => id !== socket.id)
+      .map(([id, info]) => ({
       userId: id, userRole: info.role, name: info.name, handRaised: !!info.handRaised,
     }));
 
@@ -177,7 +218,7 @@ io.on('connection', socket => {
     socket.emit('existing-users', existingDetailed);
     socket.to(roomId).emit('user-joined', { userId: socket.id, userRole: role, name });
 
-    rooms[roomId][socket.id] = { role, name, handRaised: false };
+    rooms[roomId][socket.id] = { role, name, identity, handRaised: false };
     socket.join(roomId);
     socket.roomId = roomId;
     socket.userRole = role;
@@ -190,6 +231,14 @@ io.on('connection', socket => {
       pendingRequests[roomId].forEach(req => {
         socket.emit('pending-join', { from: req.socketId, name: req.name });
         socket.emit('join-request', { socketId: req.socketId, name: req.name });
+      });
+    }
+    if (isHostRole(role) && pendingScreenShareRequests[roomId]?.length > 0) {
+      pendingScreenShareRequests[roomId].forEach(req => {
+        socket.emit('screen-share-permission-requested', {
+          from: req.socketId,
+          name: req.name,
+        });
       });
     }
     console.log(`${name} (${role}) joined room ${roomId}`);
@@ -254,7 +303,56 @@ io.on('connection', socket => {
     if (roomSharers[roomId]?.sharerId === socket.id) delete roomSharers[roomId];
     socket.to(roomId).emit('screen-share-stopped', { sharerId: socket.id });
   });
-  socket.on('screen-share-request', ({ to })    => io.to(to).emit('screen-share-request', { from: socket.id }));
+  const handleScreenSharePermissionRequest = ({ roomId, name }) => {
+    const targetRoom = roomId || socket.roomId;
+    if (!targetRoom) return;
+    if (!pendingScreenShareRequests[targetRoom]) pendingScreenShareRequests[targetRoom] = [];
+    if (!pendingScreenShareRequests[targetRoom].find(r => r.socketId === socket.id)) {
+      pendingScreenShareRequests[targetRoom].push({
+        socketId: socket.id,
+        name: name || socket.displayName || 'Student',
+      });
+    }
+    io.to(targetRoom).emit('screen-share-permission-requested', {
+      from: socket.id,
+      name: name || socket.displayName || 'Student',
+    });
+    io.to(targetRoom).emit('screen-share-request-pending', {
+      from: socket.id,
+      name: name || socket.displayName || 'Student',
+    });
+    io.to(targetRoom).emit('screen-share-approval-request', {
+      from: socket.id,
+      name: name || socket.displayName || 'Student',
+    });
+  };
+  socket.on('screen-share-permission-request', handleScreenSharePermissionRequest);
+  socket.on('screen-share-request-pending', handleScreenSharePermissionRequest);
+  socket.on('screen-share-approval-request', handleScreenSharePermissionRequest);
+  socket.on('approve-screen-share', ({ to, roomId }) => {
+    if (!canHost(socket.user)) return;
+    const targetRoom = roomId || socket.roomId;
+    if (!to || !targetRoom) return;
+    if (pendingScreenShareRequests[targetRoom]) {
+      pendingScreenShareRequests[targetRoom] =
+        pendingScreenShareRequests[targetRoom].filter(r => r.socketId !== to);
+    }
+    io.to(to).emit('screen-share-approved', { roomId: targetRoom });
+  });
+  socket.on('reject-screen-share', ({ to, roomId }) => {
+    if (!canHost(socket.user)) return;
+    const targetRoom = roomId || socket.roomId;
+    if (!to || !targetRoom) return;
+    if (pendingScreenShareRequests[targetRoom]) {
+      pendingScreenShareRequests[targetRoom] =
+        pendingScreenShareRequests[targetRoom].filter(r => r.socketId !== to);
+    }
+    io.to(to).emit('screen-share-rejected', { roomId: targetRoom });
+  });
+  socket.on('screen-share-request', ({ to, ...payload }) => {
+    if (!to) return;
+    io.to(to).emit('screen-share-request', { from: socket.id, ...payload });
+  });
   socket.on('screen-offer',         ({ to, offer })   => io.to(to).emit('screen-offer',   { from: socket.id, offer }));
   socket.on('screen-answer',        ({ to, answer })  => io.to(to).emit('screen-answer',  { from: socket.id, answer }));
   socket.on('screen-ice-candidate', ({ to, candidate }) => io.to(to).emit('screen-ice-candidate', { from: socket.id, candidate }));
@@ -309,6 +407,10 @@ io.on('connection', socket => {
       pendingRequests[socket.pendingRoom] = pendingRequests[socket.pendingRoom].filter(r => r.socketId !== socket.id);
       if (pendingRequests[socket.pendingRoom].length === 0) delete pendingRequests[socket.pendingRoom];
     }
+    Object.keys(pendingScreenShareRequests).forEach(id => {
+      pendingScreenShareRequests[id] = pendingScreenShareRequests[id].filter(r => r.socketId !== socket.id);
+      if (pendingScreenShareRequests[id].length === 0) delete pendingScreenShareRequests[id];
+    });
     if (roomId && rooms[roomId]) {
       if (roomSharers[roomId]?.sharerId === socket.id) {
         delete roomSharers[roomId];
@@ -319,6 +421,7 @@ io.on('connection', socket => {
       if (Object.keys(rooms[roomId]).length === 0) {
         delete rooms[roomId];
         delete pendingRequests[roomId];
+        delete pendingScreenShareRequests[roomId];
         delete roomSharers[roomId];
       }
     }

@@ -27,7 +27,7 @@ const FILTER_TABS = [
 const MyClasses = ({ navigation }) => {
     const { colors } = useTheme();
     const styles = useMemo(() => makeStyles(colors), [colors]);
-    const { user } = useAuth();
+    const { user, profile } = useAuth();
     const [active, setActive] = useState('MyClasses');
     const [filter, setFilter] = useState('All');
     const [classes, setClasses] = useState(null);
@@ -57,7 +57,12 @@ const MyClasses = ({ navigation }) => {
     const handleStart = async (cls) => {
         try {
             await startLiveClass(cls.id);
-            navigation.navigate('LiveClass', { cls });
+            navigation.navigate('LiveClass', {
+                cls,
+                roomId: cls.id,
+                name: profile?.name || 'Teacher',
+                role: 'teacher',
+            });
         } catch (e) {
             Toast.error(e?.message || 'Please try again.', 'Could not start class');
         }
@@ -123,7 +128,12 @@ const MyClasses = ({ navigation }) => {
                                 cls={cls}
                                 totalStudents={batch?.studentIds?.length || 0}
                                 onPress={() => {
-                                    if (cls.status === 'live') navigation.navigate('LiveClass', { cls });
+                                    if (cls.status === 'live') navigation.navigate('LiveClass', {
+                                        cls,
+                                        roomId: cls.id,
+                                        name: profile?.name || 'Teacher',
+                                        role: 'teacher',
+                                    });
                                     else navigation.navigate('ScheduleClass', { cls });
                                 }}
                             />

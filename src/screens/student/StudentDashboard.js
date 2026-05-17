@@ -224,6 +224,7 @@ const StudentDashboard = ({ navigation }) => {
                 <View style={styles.quickGrid}>
                     {[
                         { icon: 'broadcast-tower', label: 'Join Class', screen: 'JoinClass', color: colors.primary },
+                        { icon: 'graduation-cap', label: 'Courses', screen: 'StudentCourses', color: '#7C3AED' },
                         { icon: 'sticky-note', label: 'Notes', screen: 'StudentNotes', color: colors.studentColor },
                         { icon: 'check-circle', label: 'My Attendance', screen: 'StudentAttendance', color: colors.success },
                         { icon: 'bell', label: 'Notifications', screen: 'Notifications', color: colors.warning },

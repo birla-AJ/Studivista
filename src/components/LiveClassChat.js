@@ -186,6 +186,7 @@ const LiveClassChat = ({
     role,
     onClose,
     onUnreadChange,
+    onIncomingMessage,
 }) => {
     const styles = useMemo(() => makeStyles(colors), [colors]);
     const listRef = useRef(null);
@@ -212,10 +213,14 @@ const LiveClassChat = ({
             if (seenIdsRef.current.has(message.id)) return;
             seenIdsRef.current.add(message.id);
             setMessages(prev => [...prev, message]);
-            if (!visibleRef.current) onUnreadChange?.(count => count + 1);
+            const isMine = message.senderId === (userId || socket?.id);
+            if (!visibleRef.current && !isMine) {
+                onUnreadChange?.(count => count + 1);
+                onIncomingMessage?.(message);
+            }
         });
         return unsubscribe;
-    }, [onUnreadChange, roomId, socket]);
+    }, [onIncomingMessage, onUnreadChange, roomId, socket, userId]);
 
     useEffect(() => () => {
         recorderRef.current.removeRecordBackListener();
@@ -454,7 +459,7 @@ const LiveClassChat = ({
                                     </TouchableOpacity>
                                 ) : (
                                     <View style={styles.fileIconBox}>
-                                        <AppIcon name={getAttachmentIcon(attachment)} size={22} color="#FFFFFF" />
+                                        <AppIcon name={getAttachmentIcon(attachment)} size={22} color={colors.primary} />
                                     </View>
                                 )}
                                 <View style={styles.fileInfo}>
@@ -472,13 +477,13 @@ const LiveClassChat = ({
                                             style={[styles.fileActionBtn, styles.fileActionBtnPrimary]}
                                             onPress={() => openAttachment(attachment)}
                                         >
-                                            <AppIcon name="external-link-alt" size={11} color="#FFFFFF" />
+                                            <AppIcon name="external-link-alt" size={11} color={colors.primary} />
                                         </TouchableOpacity>
                                         <TouchableOpacity
                                             style={styles.fileActionBtn}
                                             onPress={() => downloadAttachment(attachment)}
                                         >
-                                            <AppIcon name="download" size={11} color="#DDE1EE" />
+                                            <AppIcon name="download" size={11} color={colors.textMuted} />
                                         </TouchableOpacity>
                                     </View>
                                 </View>
@@ -491,7 +496,7 @@ const LiveClassChat = ({
                         style={[styles.replyAction, isMine && styles.replyActionMine]}
                         onPress={() => setReplyTo(buildReplyPreview(item))}
                     >
-                        <AppIcon name="reply" size={10} color="#DDE1EE" />
+                        <AppIcon name="reply" size={10} color={colors.textMuted} />
                         <Text style={styles.replyActionText}>Reply</Text>
                     </TouchableOpacity>
                 </View>
@@ -508,11 +513,11 @@ const LiveClassChat = ({
         >
             <View style={styles.header}>
                 <View style={styles.titleRow}>
-                    <AppIcon name="comments" size={15} color="#FFFFFF" />
+                    <AppIcon name="comments" size={15} color={colors.primary} />
                     <Text style={styles.title}>Class Chat</Text>
                 </View>
                 <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
-                    <AppIcon name="times" size={14} color="#FFFFFF" />
+                    <AppIcon name="times" size={14} color={colors.textMuted} />
                 </TouchableOpacity>
             </View>
 
@@ -528,7 +533,7 @@ const LiveClassChat = ({
                 onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
                 ListEmptyComponent={
                     <View style={styles.emptyBox}>
-                        <AppIcon name="comment-dots" size={24} color="#777777" />
+                        <AppIcon name="comment-dots" size={24} color={colors.textMuted} />
                         <Text style={styles.emptyText}>No messages yet</Text>
                     </View>
                 }
@@ -546,7 +551,7 @@ const LiveClassChat = ({
                             </Text>
                         </View>
                         <TouchableOpacity style={styles.cancelReplyBtn} onPress={() => setReplyTo(null)}>
-                            <AppIcon name="times" size={11} color="#FFFFFF" />
+                            <AppIcon name="times" size={11} color={colors.textMuted} />
                         </TouchableOpacity>
                     </View>
                 )}
@@ -557,15 +562,15 @@ const LiveClassChat = ({
                         disabled={attaching}
                     >
                         {attaching ? (
-                            <ActivityIndicator size="small" color="#FFFFFF" />
+                            <ActivityIndicator size="small" color={colors.primary} />
                         ) : (
-                            <AppIcon name="paperclip" size={15} color="#FFFFFF" />
+                            <AppIcon name="paperclip" size={15} color={colors.primary} />
                         )}
                     </TouchableOpacity>
                     <TextInput
                         style={styles.input}
                         placeholder={recording ? `Recording ${formatVoiceTime(recordMs)}` : 'Message the class...'}
-                        placeholderTextColor="#8B8B96"
+                        placeholderTextColor={colors.textMuted}
                         value={draft}
                         onChangeText={setDraft}
                         multiline
@@ -577,7 +582,7 @@ const LiveClassChat = ({
                         onPress={recording ? stopVoiceRecord : startVoiceRecord}
                         disabled={attaching}
                     >
-                        <AppIcon name={recording ? 'stop' : 'microphone'} size={14} color="#FFFFFF" />
+                        <AppIcon name={recording ? 'stop' : 'microphone'} size={14} color={recording ? '#FFFFFF' : colors.primary} />
                     </TouchableOpacity>
                     <TouchableOpacity
                         style={[styles.sendBtn, !draft.trim() && styles.sendBtnDisabled]}
@@ -601,35 +606,44 @@ const makeStyles = (colors) => StyleSheet.create({
         zIndex: 20,
         marginHorizontal: SPACING.md,
         height: '75%',
-        backgroundColor: '#171923',
+        backgroundColor: colors.surface,
         borderRadius: RADIUS.lg,
         borderWidth: 1,
-        borderColor: '#2C3040',
+        borderColor: colors.border,
         overflow: 'hidden',
+        elevation: 18,
+        shadowColor: colors.overlay,
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.18,
+        shadowRadius: 18,
     },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: SPACING.md,
-        paddingVertical: SPACING.sm,
-        backgroundColor: '#202334',
+        paddingVertical: SPACING.md,
+        backgroundColor: colors.surfaceElevated,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: colors.border,
     },
     titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    title: { color: '#FFFFFF', fontSize: SIZES.sm, fontWeight: '800' },
+    title: { color: colors.text, fontSize: SIZES.sm, fontWeight: '800' },
     closeBtn: {
         width: 28,
         height: 28,
         borderRadius: 14,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        backgroundColor: colors.surfaceSubtle,
+        borderWidth: 1,
+        borderColor: colors.border,
     },
     list: { flex: 1 },
-    messages: { padding: SPACING.sm, gap: 8 },
+    messages: { padding: SPACING.md, gap: 8 },
     emptyMessages: { flexGrow: 1, justifyContent: 'center', padding: SPACING.md },
     emptyBox: { alignItems: 'center', gap: SPACING.sm },
-    emptyText: { color: '#8B8B96', fontSize: SIZES.sm, fontWeight: '600' },
+    emptyText: { color: colors.textMuted, fontSize: SIZES.sm, fontWeight: '600' },
     messageRow: {
         flexDirection: 'row',
         justifyContent: 'flex-start',
@@ -642,21 +656,24 @@ const makeStyles = (colors) => StyleSheet.create({
     },
     messageStackMine: { alignItems: 'flex-end' },
     bubble: {
-        backgroundColor: '#252938',
+        backgroundColor: colors.surfaceSubtle,
         borderRadius: RADIUS.md,
         borderBottomLeftRadius: RADIUS.xs,
         paddingHorizontal: SPACING.sm,
-        paddingVertical: 7,
+        paddingVertical: SPACING.sm,
+        borderWidth: 1,
+        borderColor: colors.border,
     },
     bubbleMine: {
-        backgroundColor: colors.primary,
+        backgroundColor: colors.primary + '25',
+        borderColor: colors.primary + '44',
         borderBottomLeftRadius: RADIUS.md,
         borderBottomRightRadius: RADIUS.xs,
     },
-    sender: { color: '#B9BCC8', fontSize: 10, fontWeight: '800', marginBottom: 2 },
+    sender: { color: colors.textMuted, fontSize: 10, fontWeight: '800', marginBottom: 2 },
     teacherSender: { color: colors.warning },
-    messageText: { color: '#FFFFFF', fontSize: SIZES.sm, lineHeight: 18 },
-    messageTextMine: { fontWeight: '600' },
+    messageText: { color: colors.text, fontSize: SIZES.sm, lineHeight: 18 },
+    messageTextMine: { color: colors.text, fontWeight: '600' },
     replyBox: {
         marginBottom: 6,
         paddingHorizontal: 8,
@@ -664,11 +681,11 @@ const makeStyles = (colors) => StyleSheet.create({
         borderLeftWidth: 3,
         borderLeftColor: colors.primary,
         borderRadius: RADIUS.xs,
-        backgroundColor: 'rgba(255,255,255,0.08)',
+        backgroundColor: colors.surfaceElevated,
     },
-    replyBoxMine: { borderLeftColor: '#FFFFFF' },
-    replySender: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
-    replyText: { color: '#D4D6E0', fontSize: 11, lineHeight: 15, marginTop: 1 },
+    replyBoxMine: { borderLeftColor: colors.primary },
+    replySender: { color: colors.text, fontSize: 10, fontWeight: '800' },
+    replyText: { color: colors.textMuted, fontSize: 11, lineHeight: 15, marginTop: 1 },
     replyAction: {
         alignSelf: 'flex-start',
         flexDirection: 'row',
@@ -679,14 +696,16 @@ const makeStyles = (colors) => StyleSheet.create({
         paddingHorizontal: 8,
         paddingVertical: 4,
         borderRadius: 12,
-        backgroundColor: 'rgba(255,255,255,0.08)',
+        backgroundColor: colors.surfaceSubtle,
+        borderWidth: 1,
+        borderColor: colors.border,
     },
     replyActionMine: {
         alignSelf: 'flex-end',
         marginLeft: 0,
         marginRight: 2,
     },
-    replyActionText: { color: '#DDE1EE', fontSize: 10, fontWeight: '800' },
+    replyActionText: { color: colors.textMuted, fontSize: 10, fontWeight: '800' },
     attachmentBox: {
         minWidth: 210,
         flexDirection: 'row',
@@ -697,19 +716,19 @@ const makeStyles = (colors) => StyleSheet.create({
         width: 72,
         height: 72,
         borderRadius: RADIUS.sm,
-        backgroundColor: 'rgba(0,0,0,0.25)',
+        backgroundColor: colors.surfaceElevated,
     },
     fileIconBox: {
         width: 46,
         height: 46,
         borderRadius: RADIUS.sm,
-        backgroundColor: 'rgba(255,255,255,0.14)',
+        backgroundColor: colors.primary + '25',
         alignItems: 'center',
         justifyContent: 'center',
     },
     fileInfo: { flex: 1 },
-    fileName: { color: '#FFFFFF', fontSize: SIZES.sm, fontWeight: '800', lineHeight: 18 },
-    fileMeta: { color: '#D4D6E0', fontSize: 10, marginTop: 3 },
+    fileName: { color: colors.text, fontSize: SIZES.sm, fontWeight: '800', lineHeight: 18 },
+    fileMeta: { color: colors.textMuted, fontSize: 10, marginTop: 3 },
     fileActions: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -724,16 +743,17 @@ const makeStyles = (colors) => StyleSheet.create({
         justifyContent: 'center',
         borderRadius: 15,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.18)',
-        backgroundColor: 'rgba(255,255,255,0.08)',
+        borderColor: colors.border,
+        backgroundColor: colors.surfaceElevated,
     },
     fileActionBtnPrimary: {
-        borderColor: 'rgba(255,255,255,0.24)',
-        backgroundColor: 'rgba(255,255,255,0.18)',
+        borderColor: colors.primary + '44',
+        backgroundColor: colors.primary + '25',
     },
     composerWrap: {
         borderTopWidth: StyleSheet.hairlineWidth,
-        borderTopColor: '#303344',
+        borderTopColor: colors.border,
+        backgroundColor: colors.surfaceElevated,
     },
     composerReply: {
         flexDirection: 'row',
@@ -744,7 +764,9 @@ const makeStyles = (colors) => StyleSheet.create({
         paddingHorizontal: SPACING.sm,
         paddingVertical: 7,
         borderRadius: RADIUS.sm,
-        backgroundColor: '#252938',
+        backgroundColor: colors.primary + '14',
+        borderWidth: 1,
+        borderColor: colors.primary + '33',
     },
     composerReplyText: { flex: 1 },
     cancelReplyBtn: {
@@ -753,7 +775,7 @@ const makeStyles = (colors) => StyleSheet.create({
         borderRadius: 14,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        backgroundColor: colors.surfaceSubtle,
     },
     composer: {
         flexDirection: 'row',
@@ -767,7 +789,9 @@ const makeStyles = (colors) => StyleSheet.create({
         borderRadius: 20,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#34384A',
+        backgroundColor: colors.primary + '25',
+        borderWidth: 1,
+        borderColor: colors.primary + '25',
     },
     voiceBtn: {
         width: 40,
@@ -775,9 +799,11 @@ const makeStyles = (colors) => StyleSheet.create({
         borderRadius: 20,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#34384A',
+        backgroundColor: colors.primary + '25',
+        borderWidth: 1,
+        borderColor: colors.primary + '25',
     },
-    voiceBtnActive: { backgroundColor: colors.danger },
+    voiceBtnActive: { backgroundColor: colors.danger, borderColor: colors.danger },
     input: {
         flex: 1,
         minHeight: 40,
@@ -785,9 +811,11 @@ const makeStyles = (colors) => StyleSheet.create({
         paddingHorizontal: SPACING.md,
         paddingVertical: Platform.OS === 'ios' ? 10 : 7,
         borderRadius: RADIUS.md,
-        backgroundColor: '#0D0F1A',
-        color: '#FFFFFF',
+        backgroundColor: colors.inputBg,
+        color: colors.text,
         fontSize: SIZES.sm,
+        borderWidth: 1,
+        borderColor: colors.border,
     },
     sendBtn: {
         width: 40,

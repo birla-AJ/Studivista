@@ -104,6 +104,18 @@ const LoginScreen = ({ navigation, route }) => {
       )}
 
       <TouchableOpacity
+        onPress={() => {
+          if (navigation.canGoBack()) navigation.goBack();
+          else navigation.replace('RoleSelect');
+        }}
+        style={styles.backBtn}
+        activeOpacity={0.7}
+        accessibilityLabel="Back to role selection"
+      >
+        <AppIcon name="arrow-left" size={18} color={colors.text} />
+      </TouchableOpacity>
+
+      <TouchableOpacity
         onPress={toggle}
         style={styles.themeBtn}
         activeOpacity={0.7}
@@ -190,6 +202,20 @@ const makeStyles = colors =>
       position: 'absolute',
       top: SPACING.xxl,
       right: SPACING.lg,
+      zIndex: 5,
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: colors.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    backBtn: {
+      position: 'absolute',
+      top: SPACING.xxl,
+      left: SPACING.lg,
       zIndex: 5,
       width: 40,
       height: 40,

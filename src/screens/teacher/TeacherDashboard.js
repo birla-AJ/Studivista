@@ -76,7 +76,12 @@ const TeacherDashboard = ({ navigation }) => {
     const handleStartClass = async (cls) => {
         try {
             await startLiveClass(cls.id);
-            navigation.navigate('LiveClass', { cls });
+            navigation.navigate('LiveClass', {
+                cls,
+                roomId: cls.id,
+                name: profile?.name || 'Teacher',
+                role: 'teacher',
+            });
         } catch (e) {
             Toast.error(e?.message || 'Please try again.', 'Could not start class');
         }
@@ -171,7 +176,12 @@ const TeacherDashboard = ({ navigation }) => {
                                         cls={cls}
                                         totalStudents={total}
                                         onPress={() => {
-                                            if (cls.status === 'live') navigation.navigate('LiveClass', { cls });
+                                            if (cls.status === 'live') navigation.navigate('LiveClass', {
+                                                cls,
+                                                roomId: cls.id,
+                                                name: profile?.name || 'Teacher',
+                                                role: 'teacher',
+                                            });
                                             else navigation.navigate('ScheduleClass', { cls });
                                         }}
                                     />

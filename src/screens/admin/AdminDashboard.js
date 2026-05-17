@@ -186,6 +186,7 @@ const AdminDashboard = ({ navigation }) => {
                         { icon: 'chalkboard-teacher', label: 'Add Teacher', screen: 'AddTeacher', color: colors.teacherColor },
                         { icon: 'users', label: 'Create Batch', screen: 'CreateBatch', color: colors.primary },
                         { icon: 'graduation-cap', label: 'Add Student', screen: 'CreateStudent', color: colors.studentColor },
+                        { icon: 'book', label: 'Add Course', screen: 'AddCourse', color: colors.adminColor },
                         { icon: 'calendar-alt', label: 'View Classes', screen: 'AdminClasses', color: colors.secondary },
                     ].map((a) => (
                         <TouchableOpacity
