@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { LiveClassPipProvider } from './src/contexts/LiveClassPipContext';
 import { ThemeProvider } from './src/theme/ThemeContext';
@@ -10,7 +11,6 @@ import { onForegroundMessage } from './src/services/notificationService';
 
 // Auth Screens
 import SplashScreen from './src/screens/SplashScreen';
-import RoleSelectScreen from './src/screens/RoleSelectScreen';
 import LoginScreen from './src/screens/LoginScreen';
 
 // Admin Screens
@@ -53,6 +53,10 @@ import VideoPlayer from './src/screens/VideoPlayer';
 import NoteDetail from './src/screens/NoteDetail';
 import WaitingScreen from './src/screens/WaitingScreen';
 import Profile from './src/screens/Profile';
+import EditProfileInfo from './src/screens/EditProfileInfo';
+import ProfileInfoScreen from './src/screens/ProfileInfoScreen';
+import ProfilePassword from './src/screens/ProfilePassword';
+import ReportBug from './src/screens/ReportBug';
 
 const Stack = createNativeStackNavigator();
 const navigationRef = createNavigationContainerRef();
@@ -90,6 +94,7 @@ const NotificationListener = () => {
 
 export default function App() {
   return (
+    <SafeAreaProvider>
     <ThemeProvider>
     <AuthProvider>
       <LiveClassPipProvider>
@@ -101,7 +106,6 @@ export default function App() {
         >
           {/* Auth */}
           <Stack.Screen name="Splash" component={SplashScreen} />
-          <Stack.Screen name="RoleSelect" component={RoleSelectScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
 
           {/* Admin */}
@@ -147,6 +151,10 @@ export default function App() {
           <Stack.Screen name="NoteDetail" component={NoteDetail} />
           <Stack.Screen name="Waiting" component={WaitingScreen} />
           <Stack.Screen name="Profile" component={Profile} />
+          <Stack.Screen name="EditProfileInfo" component={EditProfileInfo} />
+          <Stack.Screen name="ProfilePassword" component={ProfilePassword} />
+          <Stack.Screen name="ProfileInfo" component={ProfileInfoScreen} />
+          <Stack.Screen name="ReportBug" component={ReportBug} />
         </Stack.Navigator>
         <LiveClassMiniPip navigationRef={navigationRef} />
       </NavigationContainer>
@@ -154,5 +162,6 @@ export default function App() {
       </LiveClassPipProvider>
     </AuthProvider>
     </ThemeProvider>
+    </SafeAreaProvider>
   );
 }

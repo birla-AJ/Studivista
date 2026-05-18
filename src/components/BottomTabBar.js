@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { SPACING, RADIUS, SIZES } from '../theme';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SPACING, RADIUS, SIZES, TEXT_DEFAULTS } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
 import AppIcon from './AppIcon';
 
@@ -32,9 +33,16 @@ const TAB_CONFIG = {
 
 const BottomTabBar = ({ activeScreen, onNavigate, role = 'student' }) => {
     const { colors } = useTheme();
-    const styles = useMemo(() => makeStyles(colors), [colors]);
+    const insets = useSafeAreaInsets();
+    const styles = useMemo(
+        () => makeStyles(colors, insets.bottom),
+        [colors, insets.bottom],
+    );
     const navigation = useNavigation();
+    const route = useRoute();
     const tabs = TAB_CONFIG[role] || TAB_CONFIG.student;
+    const routeIsTab = tabs.some(tab => tab.key === route.name);
+    const selectedScreen = routeIsTab ? route.name : activeScreen;
 
     const handleTap = (key) => {
         if (onNavigate) onNavigate(key);
@@ -44,7 +52,7 @@ const BottomTabBar = ({ activeScreen, onNavigate, role = 'student' }) => {
     return (
         <View style={styles.container}>
             {tabs.map((tab) => {
-                const isActive = activeScreen === tab.key;
+                const isActive = selectedScreen === tab.key;
                 return (
                     <TouchableOpacity
                         key={tab.key}
@@ -65,12 +73,12 @@ const BottomTabBar = ({ activeScreen, onNavigate, role = 'student' }) => {
     );
 };
 
-const makeStyles = (colors) => StyleSheet.create({
+const makeStyles = (colors, bottomInset) => StyleSheet.create({
     container: {
         flexDirection: 'row',
         backgroundColor: colors.surface,
-        paddingBottom: SPACING.base + 4,
-        paddingTop: SPACING.md,
+        paddingBottom: Math.max(bottomInset, SPACING.sm),
+        paddingTop: SPACING.sm,
         paddingHorizontal: SPACING.sm,
         borderTopWidth: StyleSheet.hairlineWidth,
         borderTopColor: colors.border,
@@ -82,7 +90,7 @@ const makeStyles = (colors) => StyleSheet.create({
         alignItems: 'center', justifyContent: 'center',
     },
     activeIconContainer: { backgroundColor: colors.primary + '25' },
-    label: { fontSize: SIZES.xs, color: colors.textMuted, fontWeight: '500' },
+    label: { ...TEXT_DEFAULTS, fontSize: SIZES.xs, color: colors.textMuted, fontWeight: '500' },
     activeLabel: { color: colors.primary, fontWeight: '700' },
 });
 

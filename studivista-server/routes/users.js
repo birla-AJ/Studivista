@@ -30,7 +30,13 @@ router.get('/:uid', auth, async (req, res) => {
 
 router.patch('/:uid', auth, async (req, res) => {
   try {
-    const ownFields = { lastSeenAt:'last_seen_at', fcmToken:'fcm_token', avatar:'avatar' };
+    const ownFields = {
+      lastSeenAt:'last_seen_at',
+      fcmToken:'fcm_token',
+      avatar:'avatar',
+      name:'name',
+      subject:'subject',
+    };
     const adminFields = { ...ownFields, name:'name', subject:'subject', status:'status' };
     if (!isAdmin(req.user) && req.user.uid !== req.params.uid) return res.status(403).json({ error: 'Not allowed.' });
     const fieldMap = isAdmin(req.user) ? adminFields : ownFields;

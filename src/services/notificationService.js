@@ -6,7 +6,11 @@
  * New:     uses Socket.io user rooms — server emits 'notification' event.
  */
 import { NativeModules, Platform, PermissionsAndroid } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch, disconnectSocket, getSocket } from './api';
+
+const PUSH_PREF_KEY = 'studivista:push-notifications-enabled';
+const IN_APP_PREF_KEY = 'studivista:in-app-notifications-enabled';
 
 let reconnectHandler = null;
 let tokenRefreshUnsubscribe = null;
@@ -27,6 +31,32 @@ const shouldDeliverForegroundNotification = notification => {
   recentlySeenNotifications.set(id, now);
   return true;
 };
+
+const getBooleanPreference = async (key, fallback = true) => {
+  try {
+    const saved = await AsyncStorage.getItem(key);
+    if (saved === null) return fallback;
+    return saved === 'true';
+  } catch {
+    return fallback;
+  }
+};
+
+const setBooleanPreference = async (key, enabled) => {
+  await AsyncStorage.setItem(key, enabled ? 'true' : 'false');
+};
+
+export const isPushNotificationEnabled = () =>
+  getBooleanPreference(PUSH_PREF_KEY, true);
+
+export const setPushNotificationPreference = enabled =>
+  setBooleanPreference(PUSH_PREF_KEY, enabled);
+
+export const isInAppNotificationEnabled = () =>
+  getBooleanPreference(IN_APP_PREF_KEY, true);
+
+export const setInAppNotificationPreference = enabled =>
+  setBooleanPreference(IN_APP_PREF_KEY, enabled);
 
 const getMessaging = () => {
   if (!messagingModule) {
@@ -130,6 +160,14 @@ export const unregisterPushTokenForUser = async () => {
     tokenRefreshUnsubscribe();
     tokenRefreshUnsubscribe = null;
   }
+  if (!currentFcmToken) {
+    const messaging = getMessaging();
+    if (messaging) {
+      try {
+        currentFcmToken = await messaging().getToken();
+      } catch {}
+    }
+  }
   if (!currentFcmToken) return;
   try {
     await apiFetch('/api/notifications/push-token', {
@@ -145,7 +183,8 @@ export const unregisterPushTokenForUser = async () => {
 // New:      socket.on('notification', cb) → same return pattern ✅
 export const onForegroundMessage = cb => {
   const socket = getSocket();
-  const deliver = notification => {
+  const deliver = async notification => {
+    if (!(await isInAppNotificationEnabled())) return;
     if (shouldDeliverForegroundNotification(notification)) cb(notification);
   };
 

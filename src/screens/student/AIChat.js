@@ -5,13 +5,13 @@ import {
     Keyboard,
     KeyboardAvoidingView,
     Platform,
-    SafeAreaView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RADIUS, SHADOWS, SIZES, SPACING } from '../../theme';
 import { useTheme } from '../../theme/ThemeContext';
 import Header from '../../components/Header';
@@ -43,7 +43,11 @@ const ROUTES_BY_ROLE = {
 
 const AIChat = ({ navigation, route }) => {
     const { colors } = useTheme();
-    const styles = useMemo(() => makeStyles(colors), [colors]);
+    const insets = useSafeAreaInsets();
+    const styles = useMemo(
+        () => makeStyles(colors, insets.bottom),
+        [colors, insets.bottom],
+    );
     const role = route?.params?.role === 'teacher' ? 'teacher' : 'student';
     const userSender = role;
 
@@ -129,7 +133,7 @@ const AIChat = ({ navigation, route }) => {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
             <Header
                 title="AI Chat"
                 subtitle={role === 'teacher' ? 'Teaching co-pilot' : 'Study assistant'}
@@ -139,7 +143,7 @@ const AIChat = ({ navigation, route }) => {
 
             <KeyboardAvoidingView
                 style={styles.content}
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
             >
                 <FlatList
@@ -188,10 +192,13 @@ const AIChat = ({ navigation, route }) => {
     );
 };
 
-const makeStyles = (colors) => StyleSheet.create({
+const makeStyles = (colors, bottomInset) => StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.bg },
     content: { flex: 1 },
-    messages: { padding: SPACING.base, paddingBottom: SPACING.md },
+    messages: {
+        padding: SPACING.base,
+        paddingBottom: Math.max(bottomInset, SPACING.md) + SPACING.md,
+    },
     messageRow: {
         flexDirection: 'row',
         alignItems: 'flex-end',

@@ -7,12 +7,12 @@ import AppIcon from './AppIcon';
 import { useAuth } from '../contexts/AuthContext';
 
 // Routes the FAB should NOT appear on:
-//   - auth flow (Splash/Login/RoleSelect)
+//   - auth flow (Splash/Login)
 //   - the AI chat itself (would be redundant)
 //   - live-class flow (would clutter the call UI)
 //   - full-screen video
 const HIDDEN_ROUTES = new Set([
-    'Splash', 'Login', 'RoleSelect',
+    'Splash', 'Login',
     'AIChat', 'LiveClass', 'Waiting', 'VideoPlayer',
 ]);
 

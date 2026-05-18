@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, TextInput, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { RADIUS, SIZES, SPACING } from '../theme';
+import { RADIUS, SIZES, SPACING, TEXT_DEFAULTS } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
 import AppIcon from './AppIcon';
 
@@ -56,7 +56,7 @@ const InputField = ({
 
 const styles = StyleSheet.create({
     wrapper: { marginBottom: SPACING.base },
-    label: { fontSize: SIZES.sm, fontWeight: '600', marginBottom: SPACING.xs, letterSpacing: 0.3 },
+    label: { ...TEXT_DEFAULTS, fontSize: SIZES.sm, fontWeight: '600', marginBottom: SPACING.xs, letterSpacing: 0.3 },
     inputContainer: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -66,9 +66,9 @@ const styles = StyleSheet.create({
         paddingVertical: SPACING.sm + 2,
     },
     icon: { marginRight: SPACING.sm },
-    input: { flex: 1, fontSize: SIZES.md, fontWeight: '500' },
+    input: { ...TEXT_DEFAULTS, flex: 1, fontSize: SIZES.md, fontWeight: '500' },
     eyeBtn: { padding: SPACING.xs },
-    error: { fontSize: SIZES.xs, marginTop: 4 },
+    error: { ...TEXT_DEFAULTS, fontSize: SIZES.xs, marginTop: 4 },
 });
 
 export default InputField;

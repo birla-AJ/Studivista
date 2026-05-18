@@ -105,4 +105,24 @@ router.get('/me', authMw, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+router.post('/change-password', authMw, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'currentPassword and newPassword required.' });
+    }
+    if (String(newPassword).length < 8) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters.' });
+    }
+    const { rows } = await pool.query('SELECT * FROM sv_users WHERE uid=$1', [req.user.uid]);
+    const user = rows[0];
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    const ok = await bcrypt.compare(currentPassword, user.password);
+    if (!ok) return res.status(401).json({ error: 'Current password is wrong.' });
+    const hash = await bcrypt.hash(newPassword, 10);
+    await pool.query('UPDATE sv_users SET password=$2,updated_at=NOW() WHERE uid=$1', [req.user.uid, hash]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

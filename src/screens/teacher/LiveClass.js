@@ -22,6 +22,7 @@ import {
   DeviceEventEmitter,
 } from 'react-native';
 import { StackActions, useIsFocused } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   RTCPeerConnection,
@@ -48,6 +49,10 @@ import { tsToDate } from '../../utils/format';
 
 const Pip = NativeModules.StudivistaPip;
 const VIDEO_CONTROLS_HIDE_DELAY_MS = 2000;
+const MAX_ANDROID_TOP_INSET = 28;
+const MAX_ANDROID_BOTTOM_INSET = 40;
+
+const capInset = (value, max) => Math.min(Math.max(value || 0, 0), max);
 
 const setAutoPipEnabled = enabled => {
   if (Platform.OS !== 'android') return;
@@ -187,7 +192,11 @@ const formatClassRunTime = totalSeconds => {
 
 const LiveClass = ({ navigation, route }) => {
   const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
+  const styles = useMemo(
+    () => makeStyles(colors, insets.top, insets.bottom),
+    [colors, insets.top, insets.bottom],
+  );
   const { user, profile } = useAuth();
   const isFocused = useIsFocused();
   const { updateLiveClassPip, clearLiveClassPip } = useLiveClassPip();
@@ -216,7 +225,6 @@ const LiveClass = ({ navigation, route }) => {
   const isFocusedRef = useRef(false);
   const classEndedRef = useRef(false);
   const isTeacherRef = useRef(isTeacher);
-  const liveNoticeTimerRef = useRef(null);
   const liveStartedAtRef = useRef(
     tsToDate(
       cls.startedAt || cls.started_at || route?.params?.startedAt,
@@ -246,7 +254,6 @@ const LiveClass = ({ navigation, route }) => {
   const [participants, setParticipants] = useState([]);
   const [remoteStreamURLs, setRemoteStreamURLs] = useState({});
   const [leftToast, setLeftToast] = useState(null);
-  const [liveNotice, setLiveNotice] = useState(null);
   const [classEnded, setClassEnded] = useState(false);
   const [liveSocket, setLiveSocket] = useState(null);
   const [chatVisible, setChatVisible] = useState(false);
@@ -292,23 +299,6 @@ const LiveClass = ({ navigation, route }) => {
       role: isTeacher ? 'host' : 'participant',
     });
   }, [isTeacher, myName, roomId]);
-
-  const showLiveNotice = useCallback(notice => {
-    if (!notice?.message) return;
-    setLiveNotice(notice);
-    if (liveNoticeTimerRef.current) clearTimeout(liveNoticeTimerRef.current);
-    liveNoticeTimerRef.current = setTimeout(() => {
-      setLiveNotice(null);
-      liveNoticeTimerRef.current = null;
-    }, 3500);
-  }, []);
-
-  useEffect(
-    () => () => {
-      if (liveNoticeTimerRef.current) clearTimeout(liveNoticeTimerRef.current);
-    },
-    [],
-  );
 
   useEffect(() => {
     const updateElapsed = () => {
@@ -1413,23 +1403,14 @@ const LiveClass = ({ navigation, route }) => {
     setFullscreenSource(null);
     setChatVisible(true);
     setUnreadChatCount(0);
-    setLiveNotice(null);
   }, []);
 
   const handleIncomingChatMessage = useCallback(
-    message => {
+    () => {
       if (chatVisible) return;
       Vibration.vibrate(Platform.OS === 'android' ? 60 : 35);
-      showLiveNotice({
-        type: 'chat',
-        icon: 'comments',
-        title: 'New chat message',
-        message: `${message.senderName || 'User'}: ${
-          message.text || 'Attachment'
-        }`,
-      });
     },
-    [chatVisible, showLiveNotice],
+    [chatVisible],
   );
 
   useEffect(() => {
@@ -1506,10 +1487,6 @@ const LiveClass = ({ navigation, route }) => {
         </TouchableOpacity>
 
         <View style={styles.topCenter}>
-          <View style={styles.livePill}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveText}>LIVE</Text>
-          </View>
           <Text style={styles.classTitle} numberOfLines={1}>
             {cls.title || 'Live Class'}
           </Text>
@@ -1542,33 +1519,6 @@ const LiveClass = ({ navigation, route }) => {
           <AppIcon name="sign-out-alt" size={11} color="#9ca3af" />
           <Text style={styles.leaveToastText}>{leftToast}</Text>
         </View>
-      )}
-
-      {liveNotice && (
-        <TouchableOpacity
-          style={styles.liveNotice}
-          activeOpacity={0.86}
-          onPress={liveNotice.type === 'chat' ? openChat : undefined}
-        >
-          <View style={styles.liveNoticeIcon}>
-            <AppIcon
-              name={liveNotice.icon || 'bell'}
-              size={13}
-              color={colors.primary}
-            />
-          </View>
-          <View style={styles.liveNoticeBody}>
-            <Text style={styles.liveNoticeTitle} numberOfLines={1}>
-              {liveNotice.title}
-            </Text>
-            <Text style={styles.liveNoticeText} numberOfLines={2}>
-              {liveNotice.message}
-            </Text>
-          </View>
-          {liveNotice.type === 'chat' && (
-            <Text style={styles.liveNoticeAction}>Open</Text>
-          )}
-        </TouchableOpacity>
       )}
 
       {/* ── PENDING JOIN REQUESTS (teacher only) ──────────── */}
@@ -1684,6 +1634,11 @@ const LiveClass = ({ navigation, route }) => {
         <View
           style={[styles.featuredBox, isScreenMode && styles.featuredBoxScreen]}
         >
+          <View style={styles.featuredLiveBadge}>
+            <View style={styles.liveDot} />
+            <Text style={styles.liveText}>LIVE</Text>
+          </View>
+
           {featuredStreamURL ? (
             <>
               <RTCView
@@ -2202,7 +2157,7 @@ const LiveClass = ({ navigation, route }) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
-const makeStyles = colors =>
+const makeStyles = (colors, topInset = 0, bottomInset = 0) =>
   StyleSheet.create({
     // Root — uses theme background
     container: {
@@ -2284,11 +2239,16 @@ const makeStyles = colors =>
       alignItems: 'center',
       justifyContent: 'space-between',
       paddingHorizontal: SPACING.md,
-      paddingTop: SPACING.xxxl + 4,
+      paddingTop:
+        SPACING.sm +
+        (Platform.OS === 'android'
+          ? capInset(topInset, MAX_ANDROID_TOP_INSET)
+          : topInset),
       paddingBottom: SPACING.sm,
       backgroundColor: colors.surface,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.border,
+      minHeight: 54,
     },
     leaveBtn: {
       flexDirection: 'row',
@@ -2310,6 +2270,7 @@ const makeStyles = colors =>
       flex: 1,
       alignItems: 'center',
       paddingHorizontal: SPACING.sm,
+      justifyContent: 'center',
     },
     livePill: {
       flexDirection: 'row',
@@ -2344,7 +2305,7 @@ const makeStyles = colors =>
     classSub: {
       color: colors.textMuted,
       fontSize: 10,
-      marginTop: 2,
+      marginTop: 1,
     },
     headerActions: {
       flexDirection: 'row',
@@ -2407,52 +2368,6 @@ const makeStyles = colors =>
     },
 
     // ── Pending join requests ─────────────────────────────────────────────
-    liveNotice: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: SPACING.sm,
-      backgroundColor: colors.surfaceElevated,
-      paddingHorizontal: SPACING.md,
-      paddingVertical: SPACING.sm,
-      marginHorizontal: SPACING.md,
-      marginTop: SPACING.sm,
-      borderRadius: RADIUS.md,
-      borderWidth: 1,
-      borderColor: colors.primary + '33',
-      elevation: 8,
-      shadowColor: colors.overlay,
-      shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: 0.12,
-      shadowRadius: 12,
-    },
-    liveNoticeIcon: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.primary + '18',
-    },
-    liveNoticeBody: {
-      flex: 1,
-    },
-    liveNoticeTitle: {
-      color: colors.text,
-      fontSize: SIZES.xs,
-      fontWeight: '900',
-    },
-    liveNoticeText: {
-      color: colors.textMuted,
-      fontSize: SIZES.xs,
-      fontWeight: '600',
-      marginTop: 1,
-    },
-    liveNoticeAction: {
-      color: colors.primary,
-      fontSize: SIZES.xs,
-      fontWeight: '900',
-    },
-
     pendingBox: {
       backgroundColor: colors.surface,
       marginHorizontal: SPACING.md,
@@ -2578,6 +2493,21 @@ const makeStyles = colors =>
     },
     featuredBoxScreen: {
       borderColor: colors.info + '55',
+    },
+    featuredLiveBadge: {
+      position: 'absolute',
+      top: 8,
+      left: 8,
+      zIndex: 5,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      backgroundColor: 'rgba(0,0,0,0.62)',
+      paddingHorizontal: SPACING.sm,
+      paddingVertical: 4,
+      borderRadius: RADIUS.full,
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.14)',
     },
     featuredVideo: {
       width: '100%',
@@ -2798,7 +2728,11 @@ const makeStyles = colors =>
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: SPACING.md,
-      paddingTop: SPACING.xl,
+      paddingTop:
+        SPACING.sm +
+        (Platform.OS === 'android'
+          ? capInset(topInset, MAX_ANDROID_TOP_INSET)
+          : topInset),
       paddingBottom: SPACING.sm,
       backgroundColor: 'rgba(0,0,0,0.52)',
       gap: SPACING.sm,
@@ -2847,8 +2781,12 @@ const makeStyles = colors =>
       justifyContent: 'space-around',
       alignItems: 'center',
       paddingHorizontal: SPACING.xs,
-      paddingVertical: SPACING.md,
-      paddingBottom: SPACING.xl,
+      paddingTop: SPACING.xs,
+      paddingBottom:
+        SPACING.xs +
+        (Platform.OS === 'android'
+          ? capInset(bottomInset, MAX_ANDROID_BOTTOM_INSET)
+          : bottomInset),
       backgroundColor: colors.surface,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.border,
@@ -2856,7 +2794,7 @@ const makeStyles = colors =>
     ctrlBtn: {
       backgroundColor: 'transparent',
       paddingHorizontal: SPACING.sm,
-      paddingVertical: SPACING.sm,
+      paddingVertical: SPACING.xs,
       borderRadius: RADIUS.md,
       alignItems: 'center',
       minWidth: 50,

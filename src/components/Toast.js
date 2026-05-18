@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Text, StyleSheet, Platform, TouchableOpacity, View, Dimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SIZES, SPACING, RADIUS } from '../theme';
 import AppIcon from './AppIcon';
 
@@ -31,11 +32,16 @@ const HIDDEN_Y = 140; // off-screen offset for slide-in from bottom
 
 export const ToastHost = () => {
     const [data, setData] = useState(null);
+    const insets = useSafeAreaInsets();
     const slide = useRef(new Animated.Value(HIDDEN_Y)).current;
     const opacity = useRef(new Animated.Value(0)).current;
     const timerRef = useRef(null);
+    const bottomOffset = Math.max(
+        insets.bottom + SPACING.sm,
+        Platform.OS === 'ios' ? 32 : SPACING.lg,
+    );
 
-    const animateOut = (after) => {
+    const animateOut = useCallback((after) => {
         Animated.parallel([
             Animated.timing(slide, { toValue: HIDDEN_Y, duration: 200, useNativeDriver: true }),
             Animated.timing(opacity, { toValue: 0, duration: 180, useNativeDriver: true }),
@@ -43,7 +49,7 @@ export const ToastHost = () => {
             setData(null);
             after?.();
         });
-    };
+    }, [opacity, slide]);
 
     useEffect(() => {
         _show = (opts = {}) => {
@@ -60,7 +66,7 @@ export const ToastHost = () => {
             timerRef.current = setTimeout(() => animateOut(), duration);
         };
         return () => { _show = null; };
-    }, [slide, opacity]);
+    }, [animateOut, opacity, slide]);
 
     if (!data) return null;
     const { accent, tint, icon } = COLOR_MAP[data.type] || COLOR_MAP.info;
@@ -75,7 +81,10 @@ export const ToastHost = () => {
     };
 
     return (
-        <View pointerEvents="box-none" style={styles.wrapper}>
+        <View
+            pointerEvents="box-none"
+            style={[styles.wrapper, { bottom: bottomOffset }]}
+        >
             <Animated.View
                 style={[
                     styles.toast,
@@ -125,7 +134,6 @@ const styles = StyleSheet.create({
         position: 'absolute',
         left: 0,
         right: 0,
-        bottom: Platform.OS === 'ios' ? 32 : 20,
         alignItems: 'center',
         zIndex: 9999,
         elevation: 14,

@@ -1,4 +1,4 @@
-import { Dimensions } from 'react-native';
+import { Dimensions, Platform } from 'react-native';
 
 // Responsive scale: tokens grow/shrink based on the device's shorter side.
 // Clamped so tablets don't blow up (1.3x cap) and tiny phones don't crush (0.85x floor).
@@ -89,6 +89,23 @@ export const COLORS = {
 export const SIZES = {
     xs: _s(10), sm: _s(12), md: _s(14), base: _s(16), lg: _s(18),
     xl: _s(20), xxl: _s(24), xxxl: _s(32), title: _s(28),
+};
+
+export const FONT = {
+    family: Platform.select({
+        android: 'sans-serif',
+        ios: 'System',
+        default: undefined,
+    }),
+    regular: '400',
+    medium: '600',
+    bold: '800',
+    heavy: '900',
+};
+
+export const TEXT_DEFAULTS = {
+    fontFamily: FONT.family,
+    includeFontPadding: false,
 };
 
 export const SPACING = {

@@ -3,13 +3,13 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   Image,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SIZES, SPACING } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
 import InputField from '../components/InputField';
@@ -24,13 +24,13 @@ const ROLE_ROUTES = {
   student: 'StudentDashboard',
 };
 
-const ROLE_LABELS = { admin: 'Admin', teacher: 'Teacher', student: 'Student' };
-
-const LoginScreen = ({ navigation, route }) => {
+const LoginScreen = ({ navigation }) => {
   const { colors, toggle, isDark } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const selectedRole = route?.params?.role;
-  const roleLabel = ROLE_LABELS[selectedRole];
+  const insets = useSafeAreaInsets();
+  const styles = useMemo(
+    () => makeStyles(colors, insets),
+    [colors, insets],
+  );
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -93,7 +93,7 @@ const LoginScreen = ({ navigation, route }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {!isDark && (
         <Image
           source={require('../assets/logo.png')}
@@ -104,18 +104,6 @@ const LoginScreen = ({ navigation, route }) => {
       )}
 
       <TouchableOpacity
-        onPress={() => {
-          if (navigation.canGoBack()) navigation.goBack();
-          else navigation.replace('RoleSelect');
-        }}
-        style={styles.backBtn}
-        activeOpacity={0.7}
-        accessibilityLabel="Back to role selection"
-      >
-        <AppIcon name="arrow-left" size={18} color={colors.text} />
-      </TouchableOpacity>
-
-      <TouchableOpacity
         onPress={toggle}
         style={styles.themeBtn}
         activeOpacity={0.7}
@@ -124,11 +112,14 @@ const LoginScreen = ({ navigation, route }) => {
       </TouchableOpacity>
 
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.keyboardWrap}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
       >
         <ScrollView
           contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.headerArea}>
@@ -138,12 +129,10 @@ const LoginScreen = ({ navigation, route }) => {
               resizeMode="cover"
             />
             <Text style={styles.title}>
-              {roleLabel
-                ? `Sign in as\n${roleLabel}`
-                : 'Welcome to\nStudivista'}
+              Welcome to{'\n'}Studivista
             </Text>
             <Text style={styles.subtitle}>
-              Sign in with the credentials provided to you
+              Sign in and we will open your dashboard automatically
             </Text>
           </View>
 
@@ -176,6 +165,27 @@ const LoginScreen = ({ navigation, route }) => {
               style={styles.submitBtn}
             />
 
+            <View style={styles.termsWrap}>
+              <Text style={styles.termsText}>
+                By signing in, you agree to Studivista's
+              </Text>
+              <View style={styles.termsLinks}>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('ProfileInfo', { type: 'terms' })}
+                  activeOpacity={0.75}
+                >
+                  <Text style={styles.termsLink}>Terms & Conditions</Text>
+                </TouchableOpacity>
+                <Text style={styles.termsText}>and</Text>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('ProfileInfo', { type: 'privacy' })}
+                  activeOpacity={0.75}
+                >
+                  <Text style={styles.termsLink}>Privacy Policy</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
             <Text style={styles.helper}>
               Admins are seeded by us. Teachers are added by an admin. Students
               are added by their teacher.
@@ -187,7 +197,7 @@ const LoginScreen = ({ navigation, route }) => {
   );
 };
 
-const makeStyles = colors =>
+const makeStyles = (colors, insets) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.bg },
     bgWatermark: {
@@ -200,7 +210,7 @@ const makeStyles = colors =>
     },
     themeBtn: {
       position: 'absolute',
-      top: SPACING.xxl,
+      top: Math.max(insets.top, SPACING.md) + SPACING.sm,
       right: SPACING.lg,
       zIndex: 5,
       width: 40,
@@ -212,25 +222,19 @@ const makeStyles = colors =>
       borderWidth: 1,
       borderColor: colors.border,
     },
-    backBtn: {
-      position: 'absolute',
-      top: SPACING.xxl,
-      left: SPACING.lg,
-      zIndex: 5,
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      backgroundColor: colors.surface,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 1,
-      borderColor: colors.border,
+    keyboardWrap: {
+      flex: 1,
     },
-    scroll: { padding: SPACING.xl, paddingBottom: SPACING.xxxl },
+    scroll: {
+      flexGrow: 1,
+      paddingHorizontal: SPACING.xl,
+      paddingTop: SPACING.lg,
+      paddingBottom: Math.max(insets.bottom, SPACING.lg) + SPACING.xxl,
+      justifyContent: 'center',
+    },
     headerArea: {
       alignItems: 'center',
       marginBottom: SPACING.xxl,
-      paddingTop: SPACING.xl,
     },
     logoImg: {
       width: 96,
@@ -265,6 +269,31 @@ const makeStyles = colors =>
       textAlign: 'center',
       marginTop: SPACING.sm,
       marginBottom: -SPACING.xs,
+    },
+    termsWrap: {
+      alignItems: 'center',
+      marginTop: SPACING.lg,
+      gap: SPACING.xs,
+    },
+    termsLinks: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexWrap: 'wrap',
+      gap: SPACING.xs,
+    },
+    termsText: {
+      color: colors.textMuted,
+      fontSize: SIZES.xs,
+      fontWeight: '600',
+      textAlign: 'center',
+      lineHeight: 18,
+    },
+    termsLink: {
+      color: colors.primary,
+      fontSize: SIZES.xs,
+      fontWeight: '900',
+      lineHeight: 18,
     },
     helper: {
       marginTop: SPACING.xl,

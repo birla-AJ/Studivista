@@ -115,6 +115,21 @@ export const updateProfileAvatar = async (uid, file) => {
   return refreshProfile();
 };
 
+export const updateProfileInfo = async (uid, data) => {
+  if (!uid) throw new Error('User is missing.');
+  await apiFetch(`/api/users/${uid}`, {
+    method: 'PATCH',
+    body: data,
+  });
+  return refreshProfile();
+};
+
+export const changePassword = async ({ currentPassword, newPassword }) =>
+  apiFetch('/api/auth/change-password', {
+    method: 'POST',
+    body: { currentPassword, newPassword },
+  });
+
 // ── Admin: create teacher ─────────────────────────────────────────────────
 export const adminCreateTeacher = async ({
   email,

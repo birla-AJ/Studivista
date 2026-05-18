@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     View, Text, StyleSheet, Animated, Image, Easing, StatusBar,
 } from 'react-native';
-import { SIZES, SPACING, RADIUS, scale, screen } from '../theme';
+import { SIZES, SPACING, scale } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -69,11 +69,11 @@ const SplashScreen = ({ navigation }) => {
     useEffect(() => {
         if (initializing || !minTimeElapsed) return;
         if (!user) {
-            navigation.replace('RoleSelect');
+            navigation.replace('Login');
             return;
         }
         if (profile?.role) {
-            const target = ROLE_ROUTES[profile.role] || 'RoleSelect';
+            const target = ROLE_ROUTES[profile.role] || 'Login';
             navigation.replace(target);
         }
     }, [initializing, minTimeElapsed, user, profile, navigation]);

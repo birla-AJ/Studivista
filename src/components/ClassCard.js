@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { SIZES, SPACING, RADIUS, SHADOWS } from '../theme';
+import { SIZES, SPACING, RADIUS, SHADOWS, TEXT_DEFAULTS } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
 import AppIcon from './AppIcon';
 import { formatDateLabel, formatTimeLabel } from '../utils/format';
@@ -24,7 +24,7 @@ const StatusBadge = ({ status }) => {
 
 const badgeStyles = StyleSheet.create({
     statusBadge: { paddingHorizontal: SPACING.sm, paddingVertical: 3, borderRadius: RADIUS.full, flexDirection: 'row', alignItems: 'center', gap: 5 },
-    statusText: { fontSize: SIZES.xs, fontWeight: '800', letterSpacing: 0.5 },
+    statusText: { ...TEXT_DEFAULTS, fontSize: SIZES.xs, fontWeight: '800', letterSpacing: 0.5 },
 });
 
 const ClassCard = ({ cls, onPress, totalStudents, color: colorOverride }) => {
@@ -87,20 +87,20 @@ const makeStyles = (colors) => StyleSheet.create({
     accentBar: { width: 4, borderTopLeftRadius: RADIUS.lg, borderBottomLeftRadius: RADIUS.lg },
     content: { flex: 1, padding: SPACING.base },
     topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.sm },
-    duration: { fontSize: SIZES.xs, fontWeight: '600', color: colors.textMuted },
-    title: { fontSize: SIZES.base, fontWeight: '800', lineHeight: 22, marginBottom: 4, color: colors.text },
-    batchName: { fontSize: SIZES.sm, color: colors.textMuted, marginBottom: SPACING.md },
+    duration: { ...TEXT_DEFAULTS, fontSize: SIZES.xs, fontWeight: '600', color: colors.textMuted },
+    title: { ...TEXT_DEFAULTS, fontSize: SIZES.base, fontWeight: '800', lineHeight: 22, marginBottom: 4, color: colors.text },
+    batchName: { ...TEXT_DEFAULTS, fontSize: SIZES.sm, color: colors.textMuted, marginBottom: SPACING.md },
     bottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     teacherRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
     teacherAvatar: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.teacherColor + '22', alignItems: 'center', justifyContent: 'center' },
-    teacherName: { fontSize: SIZES.xs, color: colors.textMuted, fontWeight: '600', flex: 1 },
+    teacherName: { ...TEXT_DEFAULTS, fontSize: SIZES.xs, color: colors.textMuted, fontWeight: '600', flex: 1 },
     timeBox: { alignItems: 'flex-end' },
-    dateText: { fontSize: SIZES.xs, color: colors.textMuted },
-    timeText: { fontSize: SIZES.sm, fontWeight: '800' },
+    dateText: { ...TEXT_DEFAULTS, fontSize: SIZES.xs, color: colors.textMuted },
+    timeText: { ...TEXT_DEFAULTS, fontSize: SIZES.sm, fontWeight: '800' },
     joinedRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.sm },
     progressBar: { flex: 1, height: 4, backgroundColor: colors.surfaceSubtle, borderRadius: 2, overflow: 'hidden' },
     progressFill: { height: '100%', borderRadius: 2 },
-    joinedText: { fontSize: SIZES.xs, color: colors.textMuted, fontWeight: '600' },
+    joinedText: { ...TEXT_DEFAULTS, fontSize: SIZES.xs, color: colors.textMuted, fontWeight: '600' },
 });
 
 export { StatusBadge };

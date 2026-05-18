@@ -2,9 +2,8 @@ import React from 'react';
 import {
     View, Text, TouchableOpacity, StyleSheet, StatusBar, Image,
 } from 'react-native';
-import { SIZES, SPACING, RADIUS } from '../theme';
+import { SIZES, SPACING, RADIUS, TEXT_DEFAULTS } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
-import AppIcon from './AppIcon';
 
 const LOGO = require('../assets/logo.png');
 
@@ -15,9 +14,8 @@ const Header = ({
     onBack,
     rightComponent,
     centerTitle = true,
-    showThemeToggle = true,
 }) => {
-    const { colors, isDark, toggle } = useTheme();
+    const { colors, isDark } = useTheme();
 
     return (
         <View style={[styles.header, { backgroundColor: colors.headerBg, borderBottomColor: colors.border }]}>
@@ -46,11 +44,7 @@ const Header = ({
             </View>
 
             <View style={styles.rightSection}>
-                {showThemeToggle && !rightComponent ? (
-                    <TouchableOpacity onPress={toggle} activeOpacity={0.7} style={styles.toggleBtn}>
-                        <AppIcon name={isDark ? 'sun' : 'moon'} size={18} color={colors.text} />
-                    </TouchableOpacity>
-                ) : (rightComponent || <View style={{ width: 36 }} />)}
+                {rightComponent || <View style={{ width: 36 }} />}
             </View>
         </View>
     );
@@ -69,11 +63,10 @@ const styles = StyleSheet.create({
     centerSection: { flex: 1, alignItems: 'center' },
     rightSection: { width: 44, alignItems: 'flex-end' },
     backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-    backIcon: { fontSize: 32, lineHeight: 36, fontWeight: '300' },
+    backIcon: { ...TEXT_DEFAULTS, fontSize: 32, lineHeight: 36, fontWeight: '300' },
     logoImg: { width: 32, height: 32, borderRadius: RADIUS.sm, marginBottom: 4 },
-    title: { fontSize: SIZES.md, fontWeight: '700', letterSpacing: 0.2 },
-    subtitle: { fontSize: SIZES.xs, marginTop: 1 },
-    toggleBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+    title: { ...TEXT_DEFAULTS, fontSize: SIZES.md, fontWeight: '700', letterSpacing: 0.2 },
+    subtitle: { ...TEXT_DEFAULTS, fontSize: SIZES.xs, marginTop: 1 },
 });
 
 export default Header;

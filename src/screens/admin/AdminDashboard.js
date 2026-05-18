@@ -46,7 +46,7 @@ const cardStyles = StyleSheet.create({
 });
 
 const AdminDashboard = ({ navigation }) => {
-    const { colors, toggle, isDark } = useTheme();
+    const { colors } = useTheme();
     const styles = useMemo(() => makeStyles(colors), [colors]);
     const [active, setActive] = useState('AdminDashboard');
     const { profile } = useAuth();
@@ -104,9 +104,6 @@ const AdminDashboard = ({ navigation }) => {
                 subtitle="Platform Overview"
                 rightComponent={
                     <View style={styles.rightRow}>
-                        <TouchableOpacity onPress={toggle}>
-                            <AppIcon name={isDark ? 'sun' : 'moon'} size={18} color={colors.text} />
-                        </TouchableOpacity>
                         <TouchableOpacity onPress={() => navigation.navigate('Notifications')}>
                             <View style={{ position: 'relative' }}>
                                 <AppIcon name="bell" size={20} color={colors.text} />

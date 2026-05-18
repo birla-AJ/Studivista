@@ -19,7 +19,7 @@ import { tsToDate } from '../../utils/format';
 import { Toast } from '../../components/Toast';
 
 const TeacherDashboard = ({ navigation }) => {
-    const { colors, toggle, isDark } = useTheme();
+    const { colors } = useTheme();
     const styles = useMemo(() => makeStyles(colors), [colors]);
     const [active, setActive] = useState('TeacherDashboard');
     const { user, profile } = useAuth();
@@ -94,9 +94,6 @@ const TeacherDashboard = ({ navigation }) => {
                 subtitle="Teacher Portal"
                 rightComponent={
                     <View style={styles.rightRow}>
-                        <TouchableOpacity onPress={toggle}>
-                            <AppIcon name={isDark ? 'sun' : 'moon'} size={18} color={colors.text} />
-                        </TouchableOpacity>
                         <TouchableOpacity onPress={() => navigation.navigate('Notifications')}>
                             <View style={{ position: 'relative' }}>
                                 <AppIcon name="bell" size={20} color={colors.text} />

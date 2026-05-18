@@ -1,346 +1,872 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity, Image, Alert, ActivityIndicator, Platform,
+  ActivityIndicator,
+  Alert,
+  Image,
+  Platform,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { errorCodes, isErrorWithCode, pick, types } from '@react-native-documents/picker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  errorCodes,
+  isErrorWithCode,
+  pick,
+  types,
+} from '@react-native-documents/picker';
 import { SIZES, SPACING, RADIUS, SHADOWS } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
-import Header from '../components/Header';
 import BottomTabBar from '../components/BottomTabBar';
 import AppIcon from '../components/AppIcon';
 import { useAuth } from '../contexts/AuthContext';
 import { updateProfileAvatar } from '../services/authService';
-import { Toast } from '../components/Toast';
 import {
-    subscribeBatches,
-    subscribeBatchesByTeacher,
-    subscribeBatchesByIds,
-    subscribeUsersByRole,
-    subscribeClasses,
-    subscribeClassesByTeacher,
-    subscribeClassesByBatches,
+  subscribeBatches,
+  subscribeBatchesByIds,
+  subscribeBatchesByTeacher,
+  subscribeClasses,
+  subscribeClassesByBatches,
+  subscribeClassesByTeacher,
+  subscribeNotificationsForUser,
+  subscribeUsersByRole,
 } from '../services/firestoreService';
+import {
+  isInAppNotificationEnabled,
+  isPushNotificationEnabled,
+  registerPushTokenForUser,
+  requestNotificationPermission,
+  setInAppNotificationPreference,
+  setPushNotificationPreference,
+  unregisterPushTokenForUser,
+} from '../services/notificationService';
+import { Toast } from '../components/Toast';
 import { formatJoined } from '../utils/format';
 
+const getInitial = value => (value || '?').charAt(0).toUpperCase();
+
 const Profile = ({ navigation }) => {
-    const { colors, isDark, toggle } = useTheme();
-    const styles = useMemo(() => makeStyles(colors), [colors]);
-    const { user, profile, signOut, setSession } = useAuth();
-    const [active, setActive] = useState('Profile');
-    const [avatarSaving, setAvatarSaving] = useState(false);
+  const { colors, isDark, toggle } = useTheme();
+  const insets = useSafeAreaInsets();
+  const styles = useMemo(
+    () => makeStyles(colors, insets.top),
+    [colors, insets.top],
+  );
+  const { user, profile, signOut, setSession } = useAuth();
 
-    const [batches, setBatches] = useState([]);
-    const [classes, setClasses] = useState([]);
-    const [students, setStudents] = useState([]);
-    const [teachers, setTeachers] = useState([]);
+  const [active, setActive] = useState('Profile');
+  const [avatarSaving, setAvatarSaving] = useState(false);
+  const [batches, setBatches] = useState([]);
+  const [classes, setClasses] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [teachers, setTeachers] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [pushOn, setPushOn] = useState(true);
+  const [inAppOn, setInAppOn] = useState(true);
+  const [notificationBusy, setNotificationBusy] = useState(false);
 
-    const isAdmin = profile?.role === 'admin';
-    const isTeacher = profile?.role === 'teacher';
-    const isStudent = profile?.role === 'student';
-    const role = profile?.role || 'student';
-    const profileBatchIds = useMemo(() => profile?.batchIds || [], [profile]);
+  const isAdmin = profile?.role === 'admin';
+  const isTeacher = profile?.role === 'teacher';
+  const isStudent = profile?.role === 'student';
+  const role = profile?.role || 'student';
+  const roleColor = isTeacher
+    ? colors.teacherColor
+    : isStudent
+    ? colors.studentColor
+    : colors.adminColor;
+  const roleLabel = isTeacher ? 'Teacher' : isStudent ? 'Student' : 'Admin';
+  const profileBatchIds = useMemo(() => profile?.batchIds || [], [profile]);
 
-    // Live counts for the stats row.
-    useEffect(() => {
-        if (!user?.uid) return;
-        if (isAdmin) {
-            const u1 = subscribeBatches(setBatches);
-            const u2 = subscribeUsersByRole('teacher', setTeachers);
-            const u3 = subscribeUsersByRole('student', setStudents);
-            const u4 = subscribeClasses(setClasses);
-            return () => { u1?.(); u2?.(); u3?.(); u4?.(); };
-        }
-        if (isTeacher) {
-            const u1 = subscribeBatchesByTeacher(user.uid, setBatches);
-            const u2 = subscribeClassesByTeacher(user.uid, setClasses);
-            const u3 = subscribeUsersByRole('student', setStudents);
-            return () => { u1?.(); u2?.(); u3?.(); };
-        }
-        if (isStudent) {
-            const u1 = subscribeBatchesByIds(profileBatchIds, setBatches);
-            const u2 = subscribeClassesByBatches(profileBatchIds, setClasses);
-            return () => { u1?.(); u2?.(); };
-        }
-    }, [user?.uid, isAdmin, isTeacher, isStudent, profileBatchIds]);
+  useEffect(() => {
+    if (!user?.uid) return undefined;
 
-    const myBatchIds = useMemo(() => batches.map(b => b.id), [batches]);
-    const myStudents = useMemo(
-        () => students.filter(s => (s.batchIds || []).some(id => myBatchIds.includes(id))),
-        [students, myBatchIds],
-    );
+    if (isAdmin) {
+      const u1 = subscribeBatches(setBatches);
+      const u2 = subscribeUsersByRole('teacher', setTeachers);
+      const u3 = subscribeUsersByRole('student', setStudents);
+      const u4 = subscribeClasses(setClasses);
+      return () => {
+        u1?.();
+        u2?.();
+        u3?.();
+        u4?.();
+      };
+    }
 
-    const stats = isAdmin
-        ? [
-            { label: 'Batches',  value: batches.length,  color: colors.primary },
-            { label: 'Teachers', value: teachers.length, color: colors.teacherColor },
-            { label: 'Students', value: students.length, color: colors.studentColor },
-        ]
-        : isTeacher
-        ? [
-            { label: 'Batches',  value: batches.length,        color: colors.primary },
-            { label: 'Students', value: myStudents.length,     color: colors.secondary },
-            { label: 'Classes',  value: classes.length,        color: colors.success },
-        ]
-        : [
-            { label: 'Batches',  value: batches.length,        color: colors.primary },
-            { label: 'Classes',  value: classes.length,        color: colors.success },
-            { label: 'Joined',   value: classes.filter(c => (c.joinedStudentIds || []).includes(user?.uid)).length, color: colors.secondary },
-        ];
+    if (isTeacher) {
+      const u1 = subscribeBatchesByTeacher(user.uid, setBatches);
+      const u2 = subscribeClassesByTeacher(user.uid, setClasses);
+      const u3 = subscribeUsersByRole('student', setStudents);
+      return () => {
+        u1?.();
+        u2?.();
+        u3?.();
+      };
+    }
 
-    const initial = (profile?.name || profile?.email || '?').charAt(0).toUpperCase();
-    const photoURL = profile?.avatar || profile?.photoURL;
+    if (isStudent) {
+      const u1 = subscribeBatchesByIds(profileBatchIds, setBatches);
+      const u2 = subscribeClassesByBatches(profileBatchIds, setClasses);
+      return () => {
+        u1?.();
+        u2?.();
+      };
+    }
 
-    const normalizeUploadUri = uri =>
-        Platform.OS === 'android' && uri && !uri.includes('://') ? `file://${uri}` : uri;
+    return undefined;
+  }, [user?.uid, isAdmin, isTeacher, isStudent, profileBatchIds]);
 
-    const handleAvatarPress = async () => {
-        if (avatarSaving) return;
-        try {
-            const [selected] = await pick({
-                type: [types.images],
-                allowMultiSelection: false,
-            });
-            if (!selected) return;
-
-            setAvatarSaving(true);
-            const nextProfile = await updateProfileAvatar(user.uid, {
-                uri: normalizeUploadUri(selected.uri),
-                name: selected.name || `profile-${user.uid}.jpg`,
-                type: selected.type || 'image/jpeg',
-            });
-            await setSession(nextProfile);
-            Toast.success('Profile picture saved.');
-        } catch (e) {
-            if (isErrorWithCode(e) && e.code === errorCodes.OPERATION_CANCELED) return;
-            Toast.error(e?.message || 'Could not save profile picture.', 'Profile picture');
-        } finally {
-            setAvatarSaving(false);
-        }
+  useEffect(() => {
+    let mounted = true;
+    Promise.all([
+      isPushNotificationEnabled(),
+      isInAppNotificationEnabled(),
+    ]).then(([pushEnabled, inAppEnabled]) => {
+      if (!mounted) return;
+      setPushOn(pushEnabled);
+      setInAppOn(inAppEnabled);
+    });
+    return () => {
+      mounted = false;
     };
+  }, []);
 
-    const handleLogout = () => {
-        Alert.alert('Log out?', 'Sign out of this account?', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Sign out', style: 'destructive',
-                onPress: async () => {
-                    await signOut();
-                    navigation.reset({
-                        index: 0,
-                        routes: [{ name: 'RoleSelect' }],
-                    });
-                },
-            },
-        ]);
-    };
+  useEffect(() => {
+    if (!user?.uid) return undefined;
+    const unsub = subscribeNotificationsForUser(user.uid, list => {
+      setNotifications(list || []);
+    });
+    return () => unsub?.();
+  }, [user?.uid]);
 
-    const roleColor = isTeacher ? colors.teacherColor : isStudent ? colors.studentColor : colors.adminColor;
-    const roleLabel = isTeacher ? 'Teacher' : isStudent ? 'Student' : 'Admin';
+  const myBatchIds = useMemo(() => batches.map(b => b.id), [batches]);
+  const myStudents = useMemo(
+    () =>
+      students.filter(s =>
+        (s.batchIds || []).some(id => myBatchIds.includes(id)),
+      ),
+    [students, myBatchIds],
+  );
+  const joinedClasses = useMemo(
+    () => classes.filter(c => (c.joinedStudentIds || []).includes(user?.uid)),
+    [classes, user?.uid],
+  );
+  const unreadCount = notifications.filter(n => !n.read).length;
 
-    return (
-        <SafeAreaView style={styles.container}>
-            <Header title="Profile" subtitle={profile?.email || ''} />
+  const stats = isAdmin
+    ? [
+        { label: 'Batches', value: batches.length, color: colors.primary },
+        { label: 'Teachers', value: teachers.length, color: colors.teacherColor },
+        { label: 'Students', value: students.length, color: colors.studentColor },
+      ]
+    : isTeacher
+    ? [
+        { label: 'Batches', value: batches.length, color: colors.primary },
+        { label: 'Students', value: myStudents.length, color: colors.secondary },
+        { label: 'Classes', value: classes.length, color: colors.success },
+      ]
+    : [
+        { label: 'Batches', value: batches.length, color: colors.primary },
+        { label: 'Classes', value: classes.length, color: colors.success },
+        { label: 'Joined', value: joinedClasses.length, color: colors.secondary },
+      ];
 
-            <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
-                {/* HERO CARD */}
-                <View style={styles.hero}>
-                    <TouchableOpacity
-                        style={[styles.avatarRing, { borderColor: roleColor + '88' }]}
-                        onPress={handleAvatarPress}
-                        activeOpacity={0.82}
-                        accessibilityRole="button"
-                        accessibilityLabel="Change profile picture"
-                        disabled={avatarSaving}
-                    >
-                        {photoURL ? (
-                            <Image source={{ uri: photoURL }} style={styles.avatar} />
-                        ) : (
-                            <View style={[styles.avatar, styles.avatarFallback, { backgroundColor: roleColor + '33' }]}>
-                                <Text style={[styles.avatarInitial, { color: roleColor }]}>{initial}</Text>
-                            </View>
-                        )}
-                        <View style={[styles.editAvatarBtn, { backgroundColor: colors.primary }]}>
-                            {avatarSaving ? (
-                                <ActivityIndicator size="small" color="#FFFFFF" />
-                            ) : (
-                                <AppIcon name="camera" size={12} color="#FFFFFF" />
-                            )}
-                        </View>
-                    </TouchableOpacity>
-                    <Text style={styles.name} numberOfLines={1}>{profile?.name || 'User'}</Text>
-                    <View style={[styles.roleBadge, { backgroundColor: roleColor + '22', borderColor: roleColor + '55' }]}>
-                        <Text style={[styles.roleText, { color: roleColor }]}>{roleLabel}</Text>
-                    </View>
-                    <Text style={styles.email} numberOfLines={1}>{profile?.email}</Text>
+  const photoURL = profile?.avatar || profile?.photoURL;
+  const initial = getInitial(profile?.name || profile?.email);
+  const joinedDate = formatJoined(profile?.createdAt) || 'Not available';
+
+  const normalizeUploadUri = uri =>
+    Platform.OS === 'android' && uri && !uri.includes('://')
+      ? `file://${uri}`
+      : uri;
+
+  const handleAvatarPress = async () => {
+    if (avatarSaving || !user?.uid) return;
+    try {
+      const [selected] = await pick({
+        type: [types.images],
+        allowMultiSelection: false,
+      });
+      if (!selected) return;
+
+      setAvatarSaving(true);
+      const nextProfile = await updateProfileAvatar(user.uid, {
+        uri: normalizeUploadUri(selected.uri),
+        name: selected.name || `profile-${user.uid}.jpg`,
+        type: selected.type || 'image/jpeg',
+      });
+      await setSession(nextProfile);
+      Toast.success('Profile picture saved.');
+    } catch (e) {
+      if (isErrorWithCode(e) && e.code === errorCodes.OPERATION_CANCELED) {
+        return;
+      }
+      Toast.error(e?.message || 'Could not save profile picture.', 'Profile');
+    } finally {
+      setAvatarSaving(false);
+    }
+  };
+
+  const togglePush = async enabled => {
+    if (notificationBusy) return;
+    const previous = pushOn;
+    setPushOn(enabled);
+    setNotificationBusy(true);
+    try {
+      await setPushNotificationPreference(enabled);
+      if (enabled) {
+        const allowed = await requestNotificationPermission();
+        if (!allowed) {
+          setPushOn(false);
+          await setPushNotificationPreference(false);
+          Toast.warning('Notification permission was not granted.', 'Notifications');
+          return;
+        }
+        await registerPushTokenForUser(user?.uid);
+        Toast.success('Push notifications enabled.');
+      } else {
+        await unregisterPushTokenForUser();
+        Toast.info('Push notifications disabled.');
+      }
+    } catch (e) {
+      setPushOn(previous);
+      Toast.error(e?.message || 'Could not update push notifications.', 'Notifications');
+    } finally {
+      setNotificationBusy(false);
+    }
+  };
+
+  const toggleInApp = async enabled => {
+    const previous = inAppOn;
+    setInAppOn(enabled);
+    try {
+      await setInAppNotificationPreference(enabled);
+      Toast.info(
+        enabled ? 'In-app alerts enabled.' : 'In-app alerts disabled.',
+        'Notifications',
+      );
+    } catch (e) {
+      setInAppOn(previous);
+      Toast.error(e?.message || 'Could not update in-app alerts.', 'Notifications');
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert('Log out?', 'Sign out of this account?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign out',
+        style: 'destructive',
+        onPress: async () => {
+          await signOut();
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'Login' }],
+          });
+        },
+      },
+    ]);
+  };
+
+  const shareApp = async () => {
+    try {
+      await Share.share({
+        title: 'Studivista',
+        message: 'Join me on Studivista for live classes, notes, and learning.',
+      });
+    } catch (e) {
+      Toast.error(e?.message || 'Could not share app.', 'Share');
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.headerTitle}>Profile</Text>
+            <Text style={styles.headerSub}>Account, alerts, and privacy</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={toggle}
+            activeOpacity={0.85}
+          >
+            <AppIcon
+              name={isDark ? 'sun' : 'moon'}
+              size={16}
+              color={colors.primary}
+            />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.heroCard}>
+          <TouchableOpacity
+            style={styles.avatarButton}
+            onPress={handleAvatarPress}
+            activeOpacity={0.85}
+            disabled={avatarSaving}
+          >
+            {photoURL ? (
+              <Image source={{ uri: photoURL }} style={styles.avatar} />
+            ) : (
+              <View style={[styles.avatar, styles.avatarFallback]}>
+                <Text style={[styles.avatarInitial, { color: roleColor }]}>
+                  {initial}
+                </Text>
+              </View>
+            )}
+            <View style={[styles.editAvatarBtn, { backgroundColor: roleColor }]}>
+              {avatarSaving ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <AppIcon name="camera" size={12} color="#FFFFFF" />
+              )}
+            </View>
+          </TouchableOpacity>
+
+          <View style={styles.heroText}>
+            <View style={styles.nameRow}>
+              <Text style={styles.name} numberOfLines={1}>
+                {profile?.name || 'User'}
+              </Text>
+              <View
+                style={[
+                  styles.roleBadge,
+                  {
+                    backgroundColor: roleColor + '18',
+                    borderColor: roleColor + '40',
+                  },
+                ]}
+              >
+                <Text style={[styles.roleText, { color: roleColor }]}>
+                  {roleLabel}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.email} numberOfLines={1}>
+              {profile?.email || 'No email added'}
+            </Text>
+            <Text style={styles.joined}>Joined {joinedDate}</Text>
+
+            <View style={styles.heroStats}>
+              {stats.map(stat => (
+                <View key={stat.label} style={styles.heroStatItem}>
+                  <Text style={[styles.heroStatValue, { color: stat.color }]}>
+                    {stat.value}
+                  </Text>
+                  <Text style={styles.heroStatLabel} numberOfLines={1}>
+                    {stat.label}
+                  </Text>
                 </View>
+              ))}
+            </View>
+          </View>
+        </View>
 
-                {/* STATS */}
-                <View style={styles.statsRow}>
-                    {stats.map(s => (
-                        <View key={s.label} style={[styles.statCard, { borderTopColor: s.color }]}>
-                            <Text style={[styles.statValue, { color: s.color }]}>{s.value}</Text>
-                            <Text style={styles.statLabel}>{s.label}</Text>
-                        </View>
-                    ))}
-                </View>
+        <Section title="Profile Settings" colors={colors}>
+          <ActionRow
+            icon="user-edit"
+            color={colors.secondary}
+            title="Edit info"
+            subtitle="Update your name and account details"
+            onPress={() => navigation.navigate('EditProfileInfo')}
+            colors={colors}
+          />
+          <ActionRow
+            icon="key"
+            color={colors.primary}
+            title="Update password"
+            subtitle="Change your password while signed in"
+            onPress={() => navigation.navigate('ProfilePassword', { mode: 'update' })}
+            colors={colors}
+          />
+          <ActionRow
+            icon="undo-alt"
+            color={colors.warning}
+            title="Reset password"
+            subtitle="Send a reset link to your email"
+            onPress={() => navigation.navigate('ProfilePassword', { mode: 'reset' })}
+            colors={colors}
+            last
+          />
+        </Section>
 
-                {/* INFO */}
-                <Text style={styles.sectionTitle}>Account</Text>
-                <View style={styles.infoCard}>
-                    <InfoRow icon="envelope" label="Email" value={profile?.email || '—'} colors={colors} />
-                    {isTeacher && (
-                        <InfoRow icon="book-open" label="Subject" value={profile?.subject || 'Not set'} colors={colors} />
-                    )}
-                    <InfoRow icon="user-tag" label="Role" value={roleLabel} colors={colors} />
-                    <InfoRow
-                        icon="calendar-alt"
-                        label="Joined"
-                        value={formatJoined(profile?.createdAt) || '—'}
-                        colors={colors}
-                        last
-                    />
-                </View>
+        <Section
+          title="Notifications"
+          subtitle="Choose how Studivista can alert you."
+          colors={colors}
+        >
+          <ActionRow
+            icon="bell"
+            color={colors.warning}
+            title="Notification center"
+            subtitle={
+              unreadCount > 0
+                ? `${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}`
+                : 'All caught up'
+            }
+            onPress={() => navigation.navigate('Notifications')}
+            colors={colors}
+          />
+          <ActionRow
+            icon="mobile-alt"
+            color={colors.primary}
+            title="Push alerts"
+            subtitle="Show alerts outside the app"
+            right={
+              <Switch
+                value={pushOn}
+                onValueChange={togglePush}
+                disabled={notificationBusy}
+                trackColor={{ false: colors.border, true: colors.primary + '66' }}
+                thumbColor={pushOn ? colors.primary : colors.textMuted}
+                ios_backgroundColor={colors.border}
+              />
+            }
+            colors={colors}
+          />
+          <ActionRow
+            icon="comment-dots"
+            color={colors.secondary}
+            title="In-app alerts"
+            subtitle="Show toast alerts while the app is open"
+            right={
+              <Switch
+                value={inAppOn}
+                onValueChange={toggleInApp}
+                trackColor={{ false: colors.border, true: colors.secondary + '66' }}
+                thumbColor={inAppOn ? colors.secondary : colors.textMuted}
+                ios_backgroundColor={colors.border}
+              />
+            }
+            colors={colors}
+            last
+          />
+        </Section>
 
-                {/* SETTINGS */}
-                <Text style={styles.sectionTitle}>Settings</Text>
-                <TouchableOpacity style={styles.settingRow} onPress={toggle} activeOpacity={0.85}>
-                    <View style={[styles.settingIcon, { backgroundColor: colors.primary + '22' }]}>
-                        <AppIcon name={isDark ? 'sun' : 'moon'} size={16} color={colors.primary} />
-                    </View>
-                    <Text style={styles.settingLabel}>{isDark ? 'Light mode' : 'Dark mode'}</Text>
-                    <AppIcon name="chevron-right" size={12} color={colors.textMuted} />
-                </TouchableOpacity>
+        <Section
+          title="Permissions"
+          subtitle="Why Studivista asks for access on your device."
+          colors={colors}
+        >
+          <ActionRow
+            icon="user-shield"
+            color={colors.primary}
+            title="App permissions"
+            subtitle="Camera, microphone, screen share, notifications, files, network, audio, service, and vibration"
+            onPress={() => navigation.navigate('ProfileInfo', { type: 'permissions' })}
+            colors={colors}
+            last
+          />
+        </Section>
 
-                <TouchableOpacity
-                    style={styles.settingRow}
-                    onPress={() => navigation.navigate('Notifications')}
-                    activeOpacity={0.85}
-                >
-                    <View style={[styles.settingIcon, { backgroundColor: colors.warning + '22' }]}>
-                        <AppIcon name="bell" size={16} color={colors.warning} />
-                    </View>
-                    <Text style={styles.settingLabel}>Notifications</Text>
-                    <AppIcon name="chevron-right" size={12} color={colors.textMuted} />
-                </TouchableOpacity>
+        <Section title="Support" colors={colors}>
+          <ActionRow
+            icon="question-circle"
+            color={colors.primary}
+            title="Help and FAQ"
+            subtitle="Answers for class, notes, and account issues"
+            onPress={() => navigation.navigate('ProfileInfo', { type: 'help' })}
+            colors={colors}
+          />
+          <ActionRow
+            icon="share-alt"
+            color={colors.success}
+            title="Share app"
+            subtitle="Invite someone to Studivista"
+            onPress={shareApp}
+            colors={colors}
+          />
+          <ActionRow
+            icon="paper-plane"
+            color={colors.secondary}
+            title="Send feedback"
+            subtitle="Share suggestions and improvements"
+            onPress={() => navigation.navigate('ReportBug', { mode: 'feedback' })}
+            colors={colors}
+          />
+          <ActionRow
+            icon="headset"
+            color={colors.warning}
+            title="Contact us"
+            subtitle="Get help from your support team"
+            onPress={() => navigation.navigate('ProfileInfo', { type: 'contact' })}
+            colors={colors}
+          />
+          <ActionRow
+            icon="bug"
+            color={colors.danger}
+            title="Report bug"
+            subtitle="Tell us what went wrong"
+            onPress={() => navigation.navigate('ReportBug')}
+            colors={colors}
+            last
+          />
+        </Section>
 
-                {/* LOGOUT */}
-                <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.85}>
-                    <AppIcon name="sign-out-alt" size={16} color={colors.danger} />
-                    <Text style={[styles.logoutText, { color: colors.danger }]}>Sign out</Text>
-                </TouchableOpacity>
+        <Section title="Legal" colors={colors}>
+          <ActionRow
+            icon="info-circle"
+            color={colors.secondary}
+            title="About"
+            subtitle="Studivista version and app details"
+            onPress={() => navigation.navigate('ProfileInfo', { type: 'about' })}
+            colors={colors}
+          />
+          <ActionRow
+            icon="shield-alt"
+            color={colors.success}
+            title="Privacy policy"
+            subtitle="How account and class data is handled"
+            onPress={() => navigation.navigate('ProfileInfo', { type: 'privacy' })}
+            colors={colors}
+          />
+          <ActionRow
+            icon="lock"
+            color={colors.warning}
+            title="Security and privacy"
+            subtitle="Account safety and class controls"
+            onPress={() => navigation.navigate('ProfileInfo', { type: 'security' })}
+            colors={colors}
+          />
+          <ActionRow
+            icon="file-contract"
+            color={colors.textMuted}
+            title="Licenses"
+            subtitle="Open source notices"
+            onPress={() => navigation.navigate('ProfileInfo', { type: 'licenses' })}
+            colors={colors}
+            last
+          />
+        </Section>
 
-                <Text style={styles.versionText}>Studivista · v1.0.0</Text>
-            </ScrollView>
+        <TouchableOpacity
+          style={styles.logoutBtn}
+          onPress={handleLogout}
+          activeOpacity={0.85}
+        >
+          <AppIcon name="sign-out-alt" size={16} color={colors.danger} />
+          <Text style={styles.logoutText}>Sign out</Text>
+        </TouchableOpacity>
 
-            <BottomTabBar activeScreen={active} onNavigate={setActive} role={role} />
-        </SafeAreaView>
-    );
+        <Text style={styles.versionText}>Studivista v1.0.0</Text>
+      </ScrollView>
+
+      <BottomTabBar activeScreen={active} onNavigate={setActive} role={role} />
+    </View>
+  );
 };
 
-const InfoRow = ({ icon, label, value, colors, last }) => (
-    <View style={[infoRowStyles(colors).row, last && { borderBottomWidth: 0 }]}>
-        <View style={infoRowStyles(colors).iconWrap}>
-            <AppIcon name={icon} size={13} color={colors.textMuted} />
-        </View>
-        <Text style={infoRowStyles(colors).label}>{label}</Text>
-        <Text style={infoRowStyles(colors).value} numberOfLines={1}>{value}</Text>
+const Section = ({ title, subtitle, children, colors }) => (
+  <View style={sectionStyles(colors).wrap}>
+    <View style={sectionStyles(colors).header}>
+      <Text style={sectionStyles(colors).title}>{title}</Text>
+      {!!subtitle && <Text style={sectionStyles(colors).subtitle}>{subtitle}</Text>}
     </View>
+    <View style={sectionStyles(colors).card}>{children}</View>
+  </View>
 );
 
-const infoRowStyles = (colors) => StyleSheet.create({
+const ActionRow = ({
+  icon,
+  color,
+  title,
+  subtitle,
+  onPress,
+  right,
+  colors,
+  last,
+}) => {
+  const C = onPress ? TouchableOpacity : View;
+  const accent = color || colors.textMuted;
+
+  return (
+    <C
+      style={[
+        rowStyles(colors).row,
+        last && rowStyles(colors).lastRow,
+      ]}
+      onPress={onPress}
+      activeOpacity={0.85}
+    >
+      <View style={[rowStyles(colors).iconWrap, { backgroundColor: accent + '18' }]}>
+        <AppIcon name={icon} size={14} color={accent} />
+      </View>
+      <View style={rowStyles(colors).textWrap}>
+        <Text style={rowStyles(colors).title}>{title}</Text>
+        {!!subtitle && (
+          <Text style={rowStyles(colors).subtitle} numberOfLines={2}>
+            {subtitle}
+          </Text>
+        )}
+      </View>
+      {right || (onPress ? (
+        <AppIcon name="chevron-right" size={12} color={colors.textMuted} />
+      ) : null)}
+    </C>
+  );
+};
+
+const sectionStyles = colors =>
+  StyleSheet.create({
+    wrap: {
+      marginTop: SPACING.lg,
+    },
+    header: {
+      marginBottom: SPACING.sm,
+      paddingHorizontal: 2,
+    },
+    title: {
+      color: colors.text,
+      fontSize: SIZES.base,
+      fontWeight: '900',
+    },
+    subtitle: {
+      color: colors.textMuted,
+      fontSize: SIZES.xs,
+      fontWeight: '600',
+      lineHeight: SIZES.xs + 5,
+      marginTop: 2,
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: RADIUS.lg,
+      paddingHorizontal: SPACING.md,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      ...SHADOWS.small,
+    },
+  });
+
+const rowStyles = colors =>
+  StyleSheet.create({
     row: {
-        flexDirection: 'row', alignItems: 'center', gap: SPACING.md,
-        paddingVertical: SPACING.md,
-        borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: SPACING.md,
+      minHeight: 62,
+      paddingVertical: SPACING.md,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.border,
+    },
+    lastRow: {
+      borderBottomWidth: 0,
     },
     iconWrap: {
-        width: 28, height: 28, borderRadius: 14,
-        backgroundColor: colors.surfaceSubtle,
-        alignItems: 'center', justifyContent: 'center',
+      width: 36,
+      height: 36,
+      borderRadius: RADIUS.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
     },
-    label: { fontSize: SIZES.sm, color: colors.textMuted, fontWeight: '600', minWidth: 70 },
-    value: { fontSize: SIZES.sm, color: colors.text, fontWeight: '700', flex: 1, textAlign: 'right' },
-});
+    textWrap: {
+      flex: 1,
+      paddingRight: SPACING.sm,
+    },
+    title: {
+      color: colors.text,
+      fontSize: SIZES.sm,
+      fontWeight: '900',
+    },
+    subtitle: {
+      color: colors.textMuted,
+      fontSize: SIZES.xs,
+      fontWeight: '600',
+      lineHeight: SIZES.xs + 5,
+      marginTop: 3,
+    },
+  });
 
-const makeStyles = (colors) => StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.bg },
-    scroll: { flex: 1, paddingHorizontal: SPACING.base },
-
-    hero: {
-        alignItems: 'center', paddingVertical: SPACING.xl,
+const makeStyles = (colors, topInset) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.bg,
     },
-    avatarRing: {
-        width: 116, height: 116, borderRadius: 58,
-        borderWidth: 3,
-        alignItems: 'center', justifyContent: 'center',
-        marginBottom: SPACING.md, position: 'relative',
-        ...SHADOWS.medium,
+    scroll: {
+      flex: 1,
+      paddingHorizontal: SPACING.base,
     },
-    avatar: { width: 100, height: 100, borderRadius: 50 },
-    avatarFallback: { alignItems: 'center', justifyContent: 'center' },
-    avatarInitial: { fontSize: 44, fontWeight: '900' },
+    content: {
+      paddingTop: Math.max(topInset, SPACING.md),
+      paddingBottom: 120,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: SPACING.md,
+    },
+    headerTitle: {
+      color: colors.text,
+      fontSize: SIZES.title,
+      fontWeight: '900',
+    },
+    headerSub: {
+      color: colors.textMuted,
+      fontSize: SIZES.sm,
+      fontWeight: '700',
+      marginTop: 2,
+    },
+    headerButton: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      ...SHADOWS.small,
+    },
+    heroCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: SPACING.md,
+      backgroundColor: colors.surface,
+      borderRadius: RADIUS.xl,
+      padding: SPACING.base,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      ...SHADOWS.medium,
+    },
+    avatarButton: {
+      width: 92,
+      height: 92,
+      flexShrink: 0,
+    },
+    avatar: {
+      width: 92,
+      height: 92,
+      borderRadius: 46,
+    },
+    avatarFallback: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.surfaceSubtle,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    avatarInitial: {
+      fontSize: SIZES.xxxl,
+      fontWeight: '900',
+    },
     editAvatarBtn: {
-        position: 'absolute', bottom: 4, right: 4,
-        width: 28, height: 28, borderRadius: 14,
-        alignItems: 'center', justifyContent: 'center',
-        borderWidth: 2, borderColor: colors.bg,
+      position: 'absolute',
+      right: 0,
+      bottom: 0,
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 2,
+      borderColor: colors.surface,
     },
-    name: { fontSize: SIZES.xxl, fontWeight: '900', color: colors.text, marginTop: SPACING.xs },
+    heroText: {
+      flex: 1,
+      minWidth: 0,
+    },
+    nameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: SPACING.sm,
+    },
+    name: {
+      flex: 1,
+      color: colors.text,
+      fontSize: SIZES.xl,
+      fontWeight: '900',
+    },
     roleBadge: {
-        paddingHorizontal: SPACING.md, paddingVertical: 4,
-        borderRadius: RADIUS.full, borderWidth: 1,
-        marginTop: SPACING.sm,
+      paddingHorizontal: SPACING.sm,
+      paddingVertical: 4,
+      borderRadius: RADIUS.full,
+      borderWidth: 1,
+      flexShrink: 0,
     },
-    roleText: { fontSize: SIZES.xs, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' },
-    email: { fontSize: SIZES.sm, color: colors.textMuted, marginTop: SPACING.sm },
-
-    statsRow: { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.lg },
-    statCard: {
-        flex: 1, backgroundColor: colors.surface, borderRadius: RADIUS.lg,
-        padding: SPACING.md, alignItems: 'center',
-        borderTopWidth: 3,
-        borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border,
-        ...SHADOWS.small,
+    roleText: {
+      fontSize: SIZES.xs,
+      fontWeight: '900',
+      textTransform: 'uppercase',
     },
-    statValue: { fontSize: SIZES.xxl, fontWeight: '900' },
-    statLabel: { fontSize: SIZES.xs, color: colors.textMuted, fontWeight: '600', marginTop: 2 },
-
-    sectionTitle: {
-        fontSize: SIZES.base, fontWeight: '800', color: colors.text,
-        marginTop: SPACING.lg, marginBottom: SPACING.sm,
+    email: {
+      color: colors.textMuted,
+      fontSize: SIZES.sm,
+      fontWeight: '700',
+      marginTop: 4,
     },
-    infoCard: {
-        backgroundColor: colors.surface, borderRadius: RADIUS.lg,
-        paddingHorizontal: SPACING.md,
-        borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border,
-        ...SHADOWS.small,
+    joined: {
+      color: colors.textMuted,
+      fontSize: SIZES.xs,
+      fontWeight: '600',
+      marginTop: 2,
     },
-
-    settingRow: {
-        flexDirection: 'row', alignItems: 'center', gap: SPACING.md,
-        backgroundColor: colors.surface, borderRadius: RADIUS.lg,
-        padding: SPACING.md, marginBottom: SPACING.sm,
-        borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border,
-        ...SHADOWS.small,
+    heroStats: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: SPACING.xs,
+      marginTop: SPACING.md,
     },
-    settingIcon: {
-        width: 36, height: 36, borderRadius: 18,
-        alignItems: 'center', justifyContent: 'center',
+    heroStatItem: {
+      flex: 1,
+      minHeight: 42,
+      borderRadius: RADIUS.md,
+      paddingHorizontal: SPACING.xs,
+      paddingVertical: SPACING.sm,
+      backgroundColor: colors.surfaceSubtle,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    settingLabel: { flex: 1, fontSize: SIZES.md, color: colors.text, fontWeight: '700' },
-
+    heroStatValue: {
+      fontSize: SIZES.md,
+      fontWeight: '900',
+      textAlign: 'center',
+    },
+    heroStatLabel: {
+      color: colors.textMuted,
+      fontSize: SIZES.xs,
+      fontWeight: '800',
+      marginTop: 1,
+      textAlign: 'center',
+    },
     logoutBtn: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-        gap: SPACING.sm, backgroundColor: colors.danger + '15',
-        borderRadius: RADIUS.lg, padding: SPACING.md, marginTop: SPACING.lg,
-        borderWidth: 1, borderColor: colors.danger + '33',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: SPACING.sm,
+      backgroundColor: colors.danger + '14',
+      borderRadius: RADIUS.lg,
+      padding: SPACING.md,
+      marginTop: SPACING.lg,
+      borderWidth: 1,
+      borderColor: colors.danger + '30',
     },
-    logoutText: { fontSize: SIZES.md, fontWeight: '800' },
-
+    logoutText: {
+      color: colors.danger,
+      fontSize: SIZES.md,
+      fontWeight: '900',
+    },
     versionText: {
-        textAlign: 'center', color: colors.textMuted,
-        fontSize: SIZES.xs, marginTop: SPACING.lg,
+      textAlign: 'center',
+      color: colors.textMuted,
+      fontSize: SIZES.xs,
+      fontWeight: '600',
+      marginTop: SPACING.lg,
     },
-});
+  });
 
 export default Profile;

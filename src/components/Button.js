@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, View } from 'react-native';
-import { RADIUS, SIZES, SPACING, SHADOWS } from '../theme';
+import { RADIUS, SIZES, SPACING, SHADOWS, TEXT_DEFAULTS } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
 import AppIcon from './AppIcon';
 
@@ -67,7 +67,7 @@ const Button = ({
 
 const styles = StyleSheet.create({
     btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
-    label: { fontWeight: '700', letterSpacing: 0.3, textAlign: 'center' },
+    label: { ...TEXT_DEFAULTS, fontWeight: '700', letterSpacing: 0.3, textAlign: 'center' },
     content: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm },
 });
 

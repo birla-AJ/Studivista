@@ -4,6 +4,7 @@ import {
     Alert,
     FlatList,
     Image,
+    Keyboard,
     KeyboardAvoidingView,
     Linking,
     PermissionsAndroid,
@@ -12,10 +13,12 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
+    useWindowDimensions,
     View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { errorCodes, isErrorWithCode, pick, types } from '@react-native-documents/picker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AudioRecorderPlayer, {
     AudioEncoderAndroidType,
     AudioSourceAndroidType,
@@ -36,6 +39,7 @@ import {
 
 const MAX_FILE_BYTES = 40 * 1024 * 1024;
 const MIN_VOICE_MS = 700;
+const CHAT_KEYBOARD_GAP = 6;
 
 const recorderAudioSet = {
     AudioEncoderAndroid: AudioEncoderAndroidType.AAC,
@@ -188,7 +192,12 @@ const LiveClassChat = ({
     onUnreadChange,
     onIncomingMessage,
 }) => {
-    const styles = useMemo(() => makeStyles(colors), [colors]);
+    const { height: windowHeight } = useWindowDimensions();
+    const insets = useSafeAreaInsets();
+    const styles = useMemo(
+        () => makeStyles(colors, insets.bottom),
+        [colors, insets.bottom],
+    );
     const listRef = useRef(null);
     const visibleRef = useRef(visible);
     const seenIdsRef = useRef(new Set());
@@ -199,6 +208,7 @@ const LiveClassChat = ({
     const [recording, setRecording] = useState(false);
     const [recordMs, setRecordMs] = useState(0);
     const [replyTo, setReplyTo] = useState(null);
+    const [keyboardOverlap, setKeyboardOverlap] = useState(0);
 
     useEffect(() => {
         visibleRef.current = visible;
@@ -226,6 +236,28 @@ const LiveClassChat = ({
         recorderRef.current.removeRecordBackListener();
         recorderRef.current.stopRecorder().catch(() => {});
     }, []);
+
+    useEffect(() => {
+        if (Platform.OS !== 'android') return undefined;
+
+        const showSub = Keyboard.addListener('keyboardDidShow', event => {
+            const screenY = event.endCoordinates?.screenY;
+            const height = event.endCoordinates?.height || 0;
+            const overlap = screenY
+                ? Math.max(0, Math.round(windowHeight - screenY))
+                : height;
+            setKeyboardOverlap(overlap || height);
+            setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
+        });
+        const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+            setKeyboardOverlap(0);
+        });
+
+        return () => {
+            showSub.remove();
+            hideSub.remove();
+        };
+    }, [windowHeight]);
 
     const sendMessage = () => {
         const text = draft.trim();
@@ -506,11 +538,33 @@ const LiveClassChat = ({
 
     if (!visible) return null;
 
+    const Panel = Platform.OS === 'ios' ? KeyboardAvoidingView : View;
+    const panelProps =
+        Platform.OS === 'ios'
+            ? { behavior: 'padding', keyboardVerticalOffset: 0 }
+            : {};
+    const keyboardOpen = keyboardOverlap > 0;
+    const panelStyle = keyboardOpen
+        ? [
+            styles.panelKeyboardOpen,
+            {
+                bottom: keyboardOverlap + CHAT_KEYBOARD_GAP,
+                height: Math.max(260, windowHeight - keyboardOverlap - SPACING.xl),
+            },
+          ]
+        : null;
+
     return (
-        <KeyboardAvoidingView
-            style={styles.panel}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        <Panel
+            style={[
+                styles.panel,
+                panelStyle,
+            ]}
+            {...panelProps}
         >
+            <View style={styles.handleWrap}>
+                <View style={styles.handle} />
+            </View>
             <View style={styles.header}>
                 <View style={styles.titleRow}>
                     <AppIcon name="comments" size={15} color={colors.primary} />
@@ -530,6 +584,7 @@ const LiveClassChat = ({
                 contentContainerStyle={messages.length ? styles.messages : styles.emptyMessages}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
                 onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
                 ListEmptyComponent={
                     <View style={styles.emptyBox}>
@@ -593,21 +648,21 @@ const LiveClassChat = ({
                     </TouchableOpacity>
                 </View>
             </View>
-        </KeyboardAvoidingView>
+        </Panel>
     );
 };
 
-const makeStyles = (colors) => StyleSheet.create({
+const makeStyles = (colors, bottomInset = 0) => StyleSheet.create({
     panel: {
         position: 'absolute',
         left: 0,
         right: 0,
-        bottom: 92,
+        bottom: Math.max(bottomInset, SPACING.sm),
         zIndex: 20,
-        marginHorizontal: SPACING.md,
-        height: '75%',
+        height: '58%',
         backgroundColor: colors.surface,
-        borderRadius: RADIUS.lg,
+        borderTopLeftRadius: RADIUS.lg,
+        borderTopRightRadius: RADIUS.lg,
         borderWidth: 1,
         borderColor: colors.border,
         overflow: 'hidden',
@@ -617,12 +672,28 @@ const makeStyles = (colors) => StyleSheet.create({
         shadowOpacity: 0.18,
         shadowRadius: 18,
     },
+    panelKeyboardOpen: {
+        borderRadius: RADIUS.md,
+    },
+    handleWrap: {
+        alignItems: 'center',
+        paddingTop: SPACING.sm,
+        paddingBottom: SPACING.xs,
+        backgroundColor: colors.surfaceElevated,
+    },
+    handle: {
+        width: 42,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: colors.borderStrong || colors.border,
+    },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: SPACING.md,
-        paddingVertical: SPACING.md,
+        paddingTop: SPACING.xs,
+        paddingBottom: SPACING.sm,
         backgroundColor: colors.surfaceElevated,
         borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: colors.border,

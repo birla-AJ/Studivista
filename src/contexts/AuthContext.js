@@ -31,6 +31,7 @@ import { updateLastSeen } from '../services/firestoreService';
 import {
   registerUserSocket,
   registerPushTokenForUser,
+  isPushNotificationEnabled,
   requestNotificationPermission,
   unregisterPushTokenForUser,
   unregisterUserSocket,
@@ -58,8 +59,10 @@ export const AuthProvider = ({ children }) => {
     setProfile(sessionProfile);
 
     registerUserSocket(sessionProfile.uid);
-    const pushAllowed = await requestNotificationPermission();
-    if (pushAllowed) await registerPushTokenForUser(sessionProfile.uid);
+    if (await isPushNotificationEnabled()) {
+      const pushAllowed = await requestNotificationPermission();
+      if (pushAllowed) await registerPushTokenForUser(sessionProfile.uid);
+    }
 
     if (
       sessionProfile.role === 'student' &&
